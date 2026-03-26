@@ -5,7 +5,21 @@ import * as contextMenu from './contextMenu.js';
 import * as statusConfig from './statusConfig.js';
 
 export function create(itemData, callbacks) {
-  const { onDelete, onNewBelow, onFocusPrev, onFocusNext, onReorder, onPasteMultiple, onIndent, onUnindent, onToggleDone, onRefresh, isParent } = callbacks;
+  const { onDelete, onNewBelow, onFocusPrev, onFocusNext, onReorder, onPasteMultiple, onIndent, onUnindent, onToggleDone, onConvertToSpacer, onRefresh, isParent } = callbacks;
+
+  // Spacer: minimal half-height element
+  if (itemData.isSpacer) {
+    const li = document.createElement('li');
+    li.className = 'item item--spacer';
+    li.dataset.id = itemData.id;
+    li.addEventListener('mousedown', (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        onDelete(itemData.id, li);
+      }
+    });
+    return li;
+  }
 
   const li = document.createElement('li');
   li.className = 'item';
@@ -251,7 +265,10 @@ export function create(itemData, callbacks) {
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (text.textContent.trim() === '') return;
+      if (text.textContent.trim() === '') {
+        onConvertToSpacer(itemData.id, li);
+        return;
+      }
       text.blur();
       onNewBelow(itemData.id);
     }

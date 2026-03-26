@@ -90,9 +90,15 @@ function createItemElement(itemData, isParent = false) {
     onIndent: handleIndent,
     onUnindent: handleUnindent,
     onToggleDone: handleToggleDone,
+    onConvertToSpacer: handleConvertToSpacer,
     onRefresh: () => render(currentDayDate),
     isParent
   });
+}
+
+async function handleConvertToSpacer(id, li) {
+  await storage.updateItem(id, { isSpacer: true });
+  await render(currentDayDate);
 }
 
 async function handleToggleDone(id, li) {
@@ -249,12 +255,14 @@ async function handleUnindent(id, li) {
 }
 
 function handleFocusPrev(currentLi) {
-  const prev = currentLi.previousElementSibling;
+  let prev = currentLi.previousElementSibling;
+  while (prev && prev.classList.contains('item--spacer')) prev = prev.previousElementSibling;
   if (prev) item.focusText(prev);
 }
 
 function handleFocusNext(currentLi) {
-  const next = currentLi.nextElementSibling;
+  let next = currentLi.nextElementSibling;
+  while (next && next.classList.contains('item--spacer')) next = next.nextElementSibling;
   if (next) item.focusText(next);
 }
 

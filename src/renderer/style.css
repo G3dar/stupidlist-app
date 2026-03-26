@@ -882,6 +882,14 @@ header {
 }
 
 /* Drag states */
+.item--spacer {
+  min-height: calc(var(--item-height) / 2);
+}
+
+.item--spacer:hover {
+  background: var(--border);
+}
+
 .item.dragging {
   opacity: 0.3;
 }
@@ -1528,4 +1536,121 @@ header {
     max-width: calc(100vw - 24px);
     margin: 0 12px;
   }
+}
+
+/* ─── Help overlay ─── */
+
+.btn-help {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.1s, border-color 0.1s;
+  -webkit-app-region: no-drag;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.btn-help:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.help-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.12);
+  z-index: 100000;
+}
+
+.help-bubble {
+  position: fixed;
+  background: #1a1a1a;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 100001;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.help-bubble::after {
+  content: '';
+  position: absolute;
+  border: 5px solid transparent;
+}
+
+.help-bubble--top::after {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: #1a1a1a;
+}
+
+.help-bubble--bottom::after {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: #1a1a1a;
+}
+
+.help-bubble--left::after {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: #1a1a1a;
+}
+
+.help-bubble--right::after {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: #1a1a1a;
+}
+
+.help-bubble--floating {
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.help-bubble--floating::after {
+  display: none;
+}
+
+.help-key {
+  display: inline-block;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  margin-right: 2px;
+  vertical-align: baseline;
+}
+
+.help-line {
+  padding: 2px 0;
+}
+
+.help-line + .help-line {
+  border-top: 1px solid #333;
 }

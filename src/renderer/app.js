@@ -7,6 +7,7 @@ import * as projectNav from './projectNav.js';
 import * as authUI from './authUI.js';
 import * as settings from './settings.js';
 import * as shareView from './shareView.js';
+import * as helpOverlay from './helpOverlay.js';
 
 let currentDateKey = toDateKey(new Date());
 let currentView = 'day'; // 'day' or 'project'
@@ -66,6 +67,7 @@ export async function init() {
   });
 
   settings.init();
+  helpOverlay.init();
   setupNavigation();
   setupPasteAsItems();
   setupFlushSaves();
