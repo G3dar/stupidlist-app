@@ -1,6 +1,7 @@
 import { signIn, signOut, onAuthChange } from './auth.js';
 import { checkAndMigrate, uploadLocalData } from './migration.js';
 import { pullFromCloud } from './storage.js';
+import { clearAll } from './storage-local.js';
 
 let authArea = null;
 let onReload = null;
@@ -13,13 +14,16 @@ export function init(reloadCallback) {
   onAuthChange(async (user) => {
     render(user);
     if (user) {
-      // Don't block UI on cloud operations — use timeout fallback
+      // Migration dialog is user-facing — no timeout
+      try {
+        await handleMigration(user.uid);
+      } catch (err) {
+        console.warn('Migration check failed:', err.message);
+      }
+      // Cloud pull can timeout — it's a network operation
       try {
         await Promise.race([
-          (async () => {
-            await handleMigration(user.uid);
-            await pullFromCloud();
-          })(),
+          pullFromCloud(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud sync timeout')), 8000))
         ]);
       } catch (err) {
@@ -114,7 +118,7 @@ async function handleMigration(uid) {
   try {
     const result = await checkAndMigrate(uid);
     if (!result.needsMigration) {
-      sessionStorage.setItem(migrationKey, '1');
+      localStorage.setItem(migrationKey, '1');
       return;
     }
 
@@ -126,6 +130,9 @@ async function handleMigration(uid) {
         if (merge) {
           await uploadLocalData(uid, result.localData);
         }
+        // Clear local IndexedDB so orphaned items don't linger.
+        // pullFromCloud() will repopulate from the cloud source of truth.
+        await clearAll();
         localStorage.setItem(migrationKey, '1');
         resolve();
       });

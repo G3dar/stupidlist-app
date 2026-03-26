@@ -431,3 +431,15 @@ export async function exportAll() {
     lists: lists.filter(l => !l.deleted)
   };
 }
+
+export async function clearAll() {
+  await open();
+  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE], 'readwrite');
+  tx.objectStore(ITEMS_STORE).clear();
+  tx.objectStore(PROJECTS_STORE).clear();
+  tx.objectStore(LISTS_STORE).clear();
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
