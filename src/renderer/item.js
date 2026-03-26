@@ -251,6 +251,7 @@ export function create(itemData, callbacks) {
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (text.textContent.trim() === '') return;
       text.blur();
       onNewBelow(itemData.id);
     }
