@@ -18,7 +18,14 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run dist:win
+      - name: Build installer
+        run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          WIN_CSC_LINK: ''
+      - name: List dist output
+        shell: bash
+        run: ls -la dist/*.exe dist/*-win.zip 2>/dev/null || ls -la dist/
       - name: Upload to Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -39,7 +46,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run dist:mac
+      - name: Build installer
+        run: npm run dist:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Upload to Release
