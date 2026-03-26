@@ -11,7 +11,10 @@ export async function check(targetDate, onRefresh) {
 
   if (incomplete.length === 0) return;
 
-  // Button
+  // Button row
+  const btnRow = document.createElement('div');
+  btnRow.className = 'carry-over-row';
+
   const btn = document.createElement('button');
   btn.className = 'carry-over-btn' + (expanded ? ' expanded' : '');
   btn.innerHTML = `
@@ -22,7 +25,25 @@ export async function check(targetDate, onRefresh) {
     expanded = !expanded;
     check(targetDate, onRefresh);
   });
-  container.appendChild(btn);
+
+  const bringAllBtn = document.createElement('button');
+  bringAllBtn.className = 'carry-over-bring-all';
+  bringAllBtn.textContent = 'Bring all';
+  bringAllBtn.addEventListener('click', async () => {
+    bringAllBtn.disabled = true;
+    bringAllBtn.textContent = '...';
+    for (const item of incomplete) {
+      await storage.addItem(targetDate, item.text);
+      await storage.updateItem(item.id, { done: true });
+    }
+    expanded = false;
+    await check(targetDate, onRefresh);
+    onRefresh();
+  });
+
+  btnRow.appendChild(btn);
+  btnRow.appendChild(bringAllBtn);
+  container.appendChild(btnRow);
 
   if (!expanded) return;
 
@@ -43,10 +64,30 @@ export async function check(targetDate, onRefresh) {
     const group = document.createElement('div');
     group.className = 'carry-over-group';
 
-    const dateHeader = document.createElement('div');
+    const dateRow = document.createElement('div');
+    dateRow.className = 'carry-over-date-row';
+
+    const dateHeader = document.createElement('span');
     dateHeader.className = 'carry-over-date';
     dateHeader.textContent = formatDateLabel(day);
-    group.appendChild(dateHeader);
+
+    const bringDayBtn = document.createElement('button');
+    bringDayBtn.className = 'carry-over-bring-day';
+    bringDayBtn.textContent = `bring ${groups[day].length}`;
+    bringDayBtn.addEventListener('click', async () => {
+      bringDayBtn.disabled = true;
+      bringDayBtn.textContent = '...';
+      for (const item of groups[day]) {
+        await storage.addItem(targetDate, item.text);
+        await storage.updateItem(item.id, { done: true });
+      }
+      await check(targetDate, onRefresh);
+      onRefresh();
+    });
+
+    dateRow.appendChild(dateHeader);
+    dateRow.appendChild(bringDayBtn);
+    group.appendChild(dateRow);
 
     for (const item of groups[day]) {
       const row = document.createElement('div');

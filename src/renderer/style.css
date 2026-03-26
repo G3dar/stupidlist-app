@@ -501,8 +501,13 @@ header {
   margin-top: 16px;
 }
 
+.carry-over-row {
+  display: flex;
+  gap: 6px;
+}
+
 .carry-over-btn {
-  width: 100%;
+  flex: 1;
   background: none;
   border: 1px dashed var(--border);
   border-radius: 6px;
@@ -530,6 +535,31 @@ header {
   color: var(--text);
 }
 
+.carry-over-bring-all {
+  flex-shrink: 0;
+  background: none;
+  border: 1px dashed var(--carry-over-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+
+.carry-over-bring-all:hover {
+  background: var(--carry-over-bg);
+  border-color: var(--carry-over-border);
+  color: var(--text);
+}
+
+.carry-over-bring-all:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .carry-over-btn .expand-icon {
   font-size: 11px;
   color: var(--text-muted);
@@ -551,13 +581,41 @@ header {
   margin-bottom: 0;
 }
 
+.carry-over-date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
 .carry-over-date {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 4px;
+}
+
+.carry-over-bring-day {
+  background: none;
+  border: 1px solid var(--carry-over-border);
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.carry-over-bring-day:hover {
+  background: #fde68a;
+  color: var(--text);
+}
+
+.carry-over-bring-day:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .carry-over-item {
