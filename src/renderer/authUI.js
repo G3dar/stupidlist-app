@@ -89,6 +89,15 @@ function showDropdown(user) {
   email.textContent = user.email;
   dropdown.appendChild(email);
 
+  const privacyBtn = document.createElement('button');
+  privacyBtn.className = 'auth-dropdown-item';
+  privacyBtn.textContent = 'Privacy Policy';
+  privacyBtn.addEventListener('click', () => {
+    dropdown.remove();
+    showPrivacyPolicy();
+  });
+  dropdown.appendChild(privacyBtn);
+
   const signOutBtn = document.createElement('button');
   signOutBtn.className = 'auth-dropdown-item';
   signOutBtn.textContent = 'Sign out';
@@ -179,6 +188,39 @@ function showMigrationDialog(itemCount, projectCount, callback) {
   actions.appendChild(uploadBtn);
   actions.appendChild(skipBtn);
   dialog.appendChild(actions);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+}
+
+function showPrivacyPolicy() {
+  const overlay = document.createElement('div');
+  overlay.className = 'privacy-overlay';
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  const dialog = document.createElement('div');
+  dialog.className = 'privacy-dialog';
+
+  dialog.innerHTML = `
+    <h2>Privacy Policy</h2>
+
+    <h3>Your data is yours. Period.</h3>
+    <p>All your content is protected with <strong>end-to-end encryption</strong>. Your lists, your tasks, your notes — everything is encrypted before it ever leaves your device. Nobody can read your data. Not us, not anyone. We literally cannot access your content even if we wanted to.</p>
+
+    <p>We do not sell, share, or monetize your data in any way. There is no tracking, no analytics profiling, and no third-party data sharing. Your lists are none of our business.</p>
+
+    <h3>Free forever</h3>
+    <p>stupidlist is free and will always be free. No premium tiers, no surprise paywalls, no "free trial" nonsense. This is a tool built to be useful, and that's it.</p>
+
+    <h3>Got an idea?</h3>
+    <p>If you have a great idea to make stupidlist better, or if something is broken, or if you just want to say hi — write to <a href="mailto:stupid@stupidlist.app">stupid@stupidlist.app</a>. Feedback is always welcome. Always.</p>
+
+    <button class="privacy-close">Close</button>
+  `;
+
+  dialog.querySelector('.privacy-close').addEventListener('click', () => overlay.remove());
+
   overlay.appendChild(dialog);
   document.body.appendChild(overlay);
 }
