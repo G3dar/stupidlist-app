@@ -272,6 +272,20 @@ export async function moveItemFromListToDay(itemId, dayDate) {
   return addItem(dayDate, snap.data().text);
 }
 
+// ─── Upsert (for local→cloud sync) ───
+
+export async function upsertItem(data) {
+  await setDoc(userDoc('items', data.id), data, { merge: true });
+}
+
+export async function upsertProject(data) {
+  await setDoc(userDoc('projects', data.id), data, { merge: true });
+}
+
+export async function upsertList(data) {
+  await setDoc(userDoc('lists', data.id), data, { merge: true });
+}
+
 // ─── Sharing ───
 
 export async function shareList(listId, projectId, projectName, listName) {

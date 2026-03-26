@@ -397,6 +397,26 @@ export async function moveItemFromListToDay(itemId, dayDate) {
   return addItem(dayDate, original.text);
 }
 
+// ─── Upsert (for cloud→local sync) ───
+
+export async function upsertItem(data) {
+  await open();
+  const store = getStore(ITEMS_STORE, 'readwrite');
+  await promisify(store.put(data));
+}
+
+export async function upsertProject(data) {
+  await open();
+  const store = getStore(PROJECTS_STORE, 'readwrite');
+  await promisify(store.put(data));
+}
+
+export async function upsertList(data) {
+  await open();
+  const store = getStore(LISTS_STORE, 'readwrite');
+  await promisify(store.put(data));
+}
+
 // ─── Export ───
 
 export async function exportAll() {

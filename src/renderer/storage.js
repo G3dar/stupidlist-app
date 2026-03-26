@@ -1,39 +1,177 @@
 import * as local from './storage-local.js';
 import * as cloud from './storage-firestore.js';
-import { authState } from './auth.js';
+import { authState, onAuthChange } from './auth.js';
 
-function backend() {
-  return authState.isLoggedIn ? cloud : local;
+// ─── Local-first architecture ───
+// All reads go to IndexedDB (instant).
+// All writes go to IndexedDB first, then sync to Firestore in background.
+
+function syncToCloud(fn) {
+  if (!authState.isLoggedIn) return;
+  fn().catch(err => console.warn('Cloud sync:', err.message));
 }
 
-export function open() { return backend().open(); }
-export function getItemsForDay(d) { return backend().getItemsForDay(d); }
-export function addItem(d, t) { return backend().addItem(d, t); }
-export function getChildrenOf(p, d) { return backend().getChildrenOf(p, d); }
-export function updateItem(id, c) { return backend().updateItem(id, c); }
-export function deleteItem(id) { return backend().deleteItem(id); }
-export function getIncompleteItems(b) { return backend().getIncompleteItems(b); }
-export function moveItemToDay(id, d) { return backend().moveItemToDay(id, d); }
-export function reorderItems(d, ids) { return backend().reorderItems(d, ids); }
-export function getAllProjects() { return backend().getAllProjects(); }
-export function addProject(n) { return backend().addProject(n); }
-export function updateProject(id, c) { return backend().updateProject(id, c); }
-export function deleteProject(id) { return backend().deleteProject(id); }
-export function getListsForProject(pid) { return backend().getListsForProject(pid); }
-export function addList(pid, n) { return backend().addList(pid, n); }
-export function updateList(id, c) { return backend().updateList(id, c); }
-export function deleteList(id) { return backend().deleteList(id); }
-export function getItemsForList(lid) { return backend().getItemsForList(lid); }
-export function addItemToList(lid, t) { return backend().addItemToList(lid, t); }
-export function reorderListItems(lid, ids) { return backend().reorderListItems(lid, ids); }
-export function moveItemToList(iid, lid) { return backend().moveItemToList(iid, lid); }
-export function moveItemFromListToDay(iid, d) { return backend().moveItemFromListToDay(iid, d); }
-export function exportAll() { return backend().exportAll(); }
+// ─── Init ───
 
-// Sharing (cloud only)
+export async function open() {
+  await local.open();
+}
+
+// ─── Reads (always local — instant) ───
+
+export function getItemsForDay(d) { return local.getItemsForDay(d); }
+export function getChildrenOf(p, d) { return local.getChildrenOf(p, d); }
+export function getIncompleteItems(b) { return local.getIncompleteItems(b); }
+export function getAllProjects() { return local.getAllProjects(); }
+export function getListsForProject(pid) { return local.getListsForProject(pid); }
+export function getItemsForList(lid) { return local.getItemsForList(lid); }
+export function exportAll() { return local.exportAll(); }
+
+// ─── Writes (local first, cloud background via upsert) ───
+
+export async function addItem(d, t) {
+  const item = await local.addItem(d, t);
+  syncToCloud(() => cloud.upsertItem(item));
+  return item;
+}
+
+export async function updateItem(id, c) {
+  const item = await local.updateItem(id, c);
+  if (item) syncToCloud(() => cloud.upsertItem(item));
+  return item;
+}
+
+export async function deleteItem(id) {
+  await local.deleteItem(id);
+  syncToCloud(() => cloud.updateItem(id, { deleted: true, updatedAt: Date.now() }));
+}
+
+export async function moveItemToDay(id, d) {
+  // local.moveItemToDay marks original as done and creates a new item
+  const newItem = await local.moveItemToDay(id, d);
+  syncToCloud(async () => {
+    await cloud.updateItem(id, { done: true, updatedAt: Date.now() });
+    if (newItem) await cloud.upsertItem(newItem);
+  });
+  return newItem;
+}
+
+export async function reorderItems(d, ids) {
+  await local.reorderItems(d, ids);
+  syncToCloud(() => cloud.reorderItems(d, ids));
+}
+
+export async function addProject(n) {
+  const project = await local.addProject(n);
+  syncToCloud(async () => {
+    await cloud.upsertProject(project);
+    // Also sync the auto-created default list
+    const lists = await local.getListsForProject(project.id);
+    for (const list of lists) await cloud.upsertList(list);
+  });
+  return project;
+}
+
+export async function updateProject(id, c) {
+  const project = await local.updateProject(id, c);
+  if (project) syncToCloud(() => cloud.upsertProject(project));
+  return project;
+}
+
+export async function deleteProject(id) {
+  await local.deleteProject(id);
+  syncToCloud(() => cloud.deleteProject(id));
+}
+
+export async function addList(pid, n) {
+  const list = await local.addList(pid, n);
+  syncToCloud(() => cloud.upsertList(list));
+  return list;
+}
+
+export async function updateList(id, c) {
+  const list = await local.updateList(id, c);
+  if (list) syncToCloud(() => cloud.upsertList(list));
+  return list;
+}
+
+export async function deleteList(id) {
+  await local.deleteList(id);
+  syncToCloud(() => cloud.deleteList(id));
+}
+
+export async function addItemToList(lid, t) {
+  const item = await local.addItemToList(lid, t);
+  syncToCloud(() => cloud.upsertItem(item));
+  return item;
+}
+
+export async function reorderListItems(lid, ids) {
+  await local.reorderListItems(lid, ids);
+  syncToCloud(() => cloud.reorderListItems(lid, ids));
+}
+
+export async function moveItemToList(iid, lid) {
+  const newItem = await local.moveItemToList(iid, lid);
+  syncToCloud(async () => {
+    await cloud.updateItem(iid, { deleted: true, updatedAt: Date.now() });
+    if (newItem) await cloud.upsertItem(newItem);
+  });
+  return newItem;
+}
+
+export async function moveItemFromListToDay(iid, d) {
+  const newItem = await local.moveItemFromListToDay(iid, d);
+  syncToCloud(async () => {
+    await cloud.updateItem(iid, { deleted: true, updatedAt: Date.now() });
+    if (newItem) await cloud.upsertItem(newItem);
+  });
+  return newItem;
+}
+
+// ─── Sharing (cloud only) ───
+
 export function shareList(lid, pid, pn, ln) { return cloud.shareList(lid, pid, pn, ln); }
 export function getSharedList(code) { return cloud.getSharedList(code); }
 export function getSharedListItems(uid, lid) { return cloud.getSharedListItems(uid, lid); }
+
+// ─── Cloud → Local sync (on login / app load) ───
+
+export async function pullFromCloud() {
+  if (!authState.isLoggedIn) return;
+  try {
+    const cloudData = await cloud.exportAll();
+    await local.open();
+    const localData = await local.exportAll();
+
+    // Merge cloud items into local (cloud wins if newer)
+    const localItemMap = new Map(localData.items.map(i => [i.id, i]));
+    for (const ci of cloudData.items) {
+      const li = localItemMap.get(ci.id);
+      if (!li || ci.updatedAt > li.updatedAt) {
+        await local.upsertItem(ci);
+      }
+    }
+
+    const localProjMap = new Map(localData.projects.map(p => [p.id, p]));
+    for (const cp of cloudData.projects) {
+      const lp = localProjMap.get(cp.id);
+      if (!lp || cp.updatedAt > lp.updatedAt) {
+        await local.upsertProject(cp);
+      }
+    }
+
+    const localListMap = new Map(localData.lists.map(l => [l.id, l]));
+    for (const cl of cloudData.lists) {
+      const ll = localListMap.get(cl.id);
+      if (!ll || cl.updatedAt > ll.updatedAt) {
+        await local.upsertList(cl);
+      }
+    }
+  } catch (err) {
+    console.warn('Pull from cloud failed:', err.message);
+  }
+}
 
 // Expose local backend for migration
 export { local };

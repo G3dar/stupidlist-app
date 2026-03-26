@@ -1,5 +1,6 @@
 import { signIn, signOut, onAuthChange } from './auth.js';
 import { checkAndMigrate, uploadLocalData } from './migration.js';
+import { pullFromCloud } from './storage.js';
 
 let authArea = null;
 let onReload = null;
@@ -13,6 +14,8 @@ export function init(reloadCallback) {
     render(user);
     if (user) {
       await handleMigration(user.uid);
+      // Pull latest cloud data into local IndexedDB
+      await pullFromCloud();
     }
     if (onReload) onReload();
   });
