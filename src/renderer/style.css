@@ -1181,6 +1181,22 @@ header {
   background: var(--text);
 }
 
+/* Download button (web only) */
+.btn-download {
+  font-size: 18px;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.1s;
+  -webkit-app-region: no-drag;
+}
+
+.btn-download:hover {
+  color: var(--text);
+}
+
 /* Auth */
 .header-auth {
   display: flex;
