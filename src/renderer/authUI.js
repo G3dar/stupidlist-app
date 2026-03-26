@@ -13,9 +13,18 @@ export function init(reloadCallback) {
   onAuthChange(async (user) => {
     render(user);
     if (user) {
-      await handleMigration(user.uid);
-      // Pull latest cloud data into local IndexedDB
-      await pullFromCloud();
+      // Don't block UI on cloud operations — use timeout fallback
+      try {
+        await Promise.race([
+          (async () => {
+            await handleMigration(user.uid);
+            await pullFromCloud();
+          })(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud sync timeout')), 8000))
+        ]);
+      } catch (err) {
+        console.warn('Cloud sync skipped:', err.message);
+      }
     }
     if (onReload) onReload();
   });
