@@ -196,7 +196,7 @@ export function create(itemData, callbacks) {
 
   if (itemData.text) {
     // Migrate old markdown text to HTML on first load
-    const hasHtml = /<[a-z][\s\S]*>/i.test(itemData.text);
+    const hasHtml = /<[a-z][\s\S]*>/i.test(itemData.text) || /&[a-z]+;/i.test(itemData.text);
     text.innerHTML = hasHtml ? itemData.text : markdownToHtml(itemData.text);
   }
 
