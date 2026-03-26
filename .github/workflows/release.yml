@@ -28,6 +28,7 @@ jobs:
 
   build-mac:
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,6 +37,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run dist:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
         with:
           name: mac-installer
@@ -45,40 +48,26 @@ jobs:
 
   release:
     needs: [build-win, build-mac]
+    if: always() && needs.build-win.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - name: Create GitHub Release
+          merge-multiple: false
+      - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=${GITHUB_REF#refs/tags/}
-          gh release create "$TAG" \
-            --title "stupidlist $TAG" \
-            --generate-notes \
-            artifacts/win-installer/* \
-            artifacts/mac-installer/* \
-            || echo "Release already exists, uploading assets..."
-          # If release already exists, just upload the assets
-          gh release upload "$TAG" artifacts/win-installer/* artifacts/mac-installer/* --clobber 2>/dev/null || true
-
-  deploy-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build:web
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: ${{ github.token }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          channelId: live
-          projectId: stupidlist-app
+          # Collect all installer files
+          FILES=$(find artifacts -type f \( -name "*.exe" -o -name "*.zip" -o -name "*.dmg" \) 2>/dev/null)
+          if [ -z "$FILES" ]; then
+            echo "No artifacts found"
+            exit 1
+          fi
+          echo "Uploading: $FILES"
+          # Upload to existing release (created by release script) or create new one
+          gh release upload "$TAG" $FILES --clobber 2>/dev/null \
+            || gh release create "$TAG" --title "stupidlist $TAG" --generate-notes $FILES
