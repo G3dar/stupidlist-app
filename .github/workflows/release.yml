@@ -22,9 +22,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: win-installer
-          path: |
-            dist/*.exe
-            dist/*-win.zip
+          path: dist/
 
   build-mac:
     runs-on: macos-latest
@@ -42,32 +40,33 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: mac-installer
-          path: |
-            dist/*.dmg
-            dist/*-mac.zip
+          path: dist/
 
   release:
     needs: [build-win, build-mac]
     if: always() && needs.build-win.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          merge-multiple: false
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          # Collect all installer files
-          FILES=$(find artifacts -type f \( -name "*.exe" -o -name "*.zip" -o -name "*.dmg" \) 2>/dev/null)
-          if [ -z "$FILES" ]; then
-            echo "No artifacts found"
-            exit 1
-          fi
-          echo "Uploading: $FILES"
-          # Upload to existing release (created by release script) or create new one
-          gh release upload "$TAG" $FILES --clobber 2>/dev/null \
-            || gh release create "$TAG" --title "stupidlist $TAG" --generate-notes $FILES
+          echo "Tag: $TAG"
+          echo "Artifacts:"
+          find artifacts -type f | head -20
+
+          # Collect installer files into a clean folder
+          mkdir -p upload
+          find artifacts -type f \( -name "*.exe" -o -name "*.zip" -o -name "*.dmg" \) -exec cp {} upload/ \;
+          ls -la upload/
+
+          # Upload each file individually to handle spaces
+          for f in upload/*; do
+            [ -f "$f" ] || continue
+            echo "Uploading: $f"
+            gh release upload "$TAG" "$f" --clobber --repo "$GITHUB_REPOSITORY" || true
+          done
