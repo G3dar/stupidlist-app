@@ -107,9 +107,9 @@ function showDropdown(user) {
 }
 
 async function handleMigration(uid) {
-  // Don't prompt again if already handled this session
+  // Don't prompt again if already handled
   const migrationKey = `migration_done_${uid}`;
-  if (sessionStorage.getItem(migrationKey)) return;
+  if (localStorage.getItem(migrationKey)) return;
 
   try {
     const result = await checkAndMigrate(uid);
@@ -126,7 +126,7 @@ async function handleMigration(uid) {
         if (merge) {
           await uploadLocalData(uid, result.localData);
         }
-        sessionStorage.setItem(migrationKey, '1');
+        localStorage.setItem(migrationKey, '1');
         resolve();
       });
     });
