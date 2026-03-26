@@ -47,7 +47,7 @@
       var isMac = /Mac/.test(ua);
       var isWin = /Win/.test(ua);
       if (!isMac && !isWin) return;
-      btn.textContent = isMac ? 'Download for Mac' : 'Download for Windows';
+      btn.title = isMac ? 'Download for Mac' : 'Download for Windows';
       fetch('https://api.github.com/repos/G3dar/stupidlist-app/releases/latest')
         .then(function(r) { return r.json(); })
         .then(function(release) {
