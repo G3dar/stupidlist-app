@@ -3,7 +3,7 @@ import { getUid } from './auth.js';
 import { generateId, migrateState } from '../shared/constants.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, updateDoc,
-  query, where, orderBy, writeBatch
+  query, where, orderBy, writeBatch, onSnapshot
 } from 'firebase/firestore';
 
 function userCol(name) {
@@ -314,6 +314,55 @@ export async function getSharedListItems(ownerUid, listId) {
   const q = query(itemsCol, where('listId', '==', listId), where('deleted', '==', false), orderBy('order'));
   const snap = await getDocs(q);
   return snap.docs.map(d => normalize(d.data())).sort((a, b) => a.order - b.order);
+}
+
+// ─── Real-time listeners ───
+
+export function listenToDay(dayDate, callback) {
+  const q = query(userCol('items'), where('dayDate', '==', dayDate), where('deleted', '==', false));
+  return onSnapshot(q, (snapshot) => {
+    const remoteChanges = snapshot.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+    if (remoteChanges.length === 0) return;
+
+    const upserted = [];
+    const removedIds = [];
+    for (const change of remoteChanges) {
+      if (change.type === 'added' || change.type === 'modified') {
+        upserted.push(normalize(change.doc.data()));
+      } else if (change.type === 'removed') {
+        removedIds.push(change.doc.data().id);
+      }
+    }
+    callback({ upserted, removedIds });
+  });
+}
+
+export function listenToList(listId, callback) {
+  const q = query(userCol('items'), where('listId', '==', listId), where('deleted', '==', false));
+  return onSnapshot(q, (snapshot) => {
+    const remoteChanges = snapshot.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+    if (remoteChanges.length === 0) return;
+
+    const upserted = [];
+    const removedIds = [];
+    for (const change of remoteChanges) {
+      if (change.type === 'added' || change.type === 'modified') {
+        upserted.push(normalize(change.doc.data()));
+      } else if (change.type === 'removed') {
+        removedIds.push(change.doc.data().id);
+      }
+    }
+    callback({ upserted, removedIds });
+  });
+}
+
+export function listenToProjects(callback) {
+  const q = query(userCol('projects'), where('deleted', '==', false));
+  return onSnapshot(q, (snapshot) => {
+    const remoteChanges = snapshot.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+    if (remoteChanges.length === 0) return;
+    callback();
+  });
 }
 
 // ─── Export ───

@@ -1,7 +1,14 @@
 import * as storage from './storage.js';
 
 export async function load(shareCode) {
-  const shareData = await storage.getSharedList(shareCode);
+  let shareData;
+  try {
+    shareData = await storage.getSharedList(shareCode);
+  } catch (err) {
+    console.error('Share load error:', err);
+    showError('Could not load share link. Please try again.');
+    return;
+  }
   if (!shareData) {
     showError('Share link not found or expired.');
     return;

@@ -10,7 +10,7 @@ function createWindow() {
     height: 900,
     backgroundColor: '#ffffff',
     titleBarStyle: 'hiddenInset',
-    icon: path.join(__dirname, '..', '..', 'icons', 'icon.ico'),
+    icon: path.join(__dirname, '..', '..', 'icons', 'icon_new.ico'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

@@ -457,6 +457,9 @@ export function focusText(li) {
     if (text.childNodes.length > 0) {
       range.selectNodeContents(text);
       range.collapse(false);
+    } else {
+      range.setStart(text, 0);
+      range.collapse(true);
     }
     sel.removeAllRanges();
     sel.addRange(range);

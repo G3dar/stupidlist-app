@@ -12,9 +12,42 @@ let currentDateKey = toDateKey(new Date());
 let currentView = 'day'; // 'day' or 'project'
 let currentProjectId = null;
 let currentListId = null;
+let loadDayPromise = null;
+let remoteRenderTimer = null;
+let pendingRemoteRender = null;
+
+function scheduleRemoteRender(renderFn) {
+  clearTimeout(remoteRenderTimer);
+  remoteRenderTimer = setTimeout(() => {
+    const active = document.activeElement;
+    if (active && active.closest && active.closest('.item-text')) {
+      // User is editing — defer until they finish
+      pendingRemoteRender = renderFn;
+      return;
+    }
+    renderFn();
+  }, 300);
+}
+
+// Flush deferred remote render when user finishes editing
+document.addEventListener('blur', () => {
+  if (pendingRemoteRender) {
+    const fn = pendingRemoteRender;
+    pendingRemoteRender = null;
+    fn();
+  }
+}, true); // capture phase to catch contentEditable blur
 
 export async function init() {
   await storage.open();
+
+  // Check for shared list URL before setting up normal UI
+  const shareCode = getShareCode();
+  if (shareCode) {
+    authUI.init(() => {}); // no-op reload for share view
+    await shareView.load(shareCode);
+    return;
+  }
 
   projectNav.init({
     onProjectSelect: loadProject,
@@ -32,13 +65,6 @@ export async function init() {
     }
   });
 
-  // Check for shared list URL
-  const shareCode = getShareCode();
-  if (shareCode) {
-    await shareView.load(shareCode);
-    return;
-  }
-
   settings.init();
   setupNavigation();
   setupPasteAsItems();
@@ -47,18 +73,34 @@ export async function init() {
 }
 
 async function loadDay(dateKey) {
-  currentView = 'day';
-  currentDateKey = dateKey;
-  currentProjectId = null;
-  currentListId = null;
-  updateDateDisplay();
-  await dayList.render(dateKey);
+  // Serialize concurrent calls to prevent duplicate empty items
+  while (loadDayPromise) await loadDayPromise;
 
-  const today = toDateKey(new Date());
-  if (dateKey >= today) {
-    await carryOver.check(dateKey, () => dayList.render(dateKey));
-  } else {
-    document.getElementById('carry-over').innerHTML = '';
+  let resolve;
+  loadDayPromise = new Promise(r => { resolve = r; });
+
+  try {
+    currentView = 'day';
+    currentDateKey = dateKey;
+    currentProjectId = null;
+    currentListId = null;
+    updateDateDisplay();
+    await dayList.render(dateKey);
+
+    const today = toDateKey(new Date());
+    if (dateKey >= today) {
+      await carryOver.check(dateKey, () => dayList.render(dateKey));
+    } else {
+      document.getElementById('carry-over').innerHTML = '';
+    }
+
+    // Subscribe to real-time updates from other devices
+    storage.subscribe('day', dateKey, () => {
+      scheduleRemoteRender(() => dayList.render(dateKey));
+    });
+  } finally {
+    resolve();
+    loadDayPromise = null;
   }
 }
 
@@ -83,11 +125,20 @@ async function loadProject(projectId, listId) {
 
   // Render items
   await projectList.render(listId);
+
+  // Subscribe to real-time updates from other devices
+  storage.subscribe('list', listId, () => {
+    scheduleRemoteRender(() => projectList.render(listId));
+  });
 }
 
 async function loadList(listId) {
   currentListId = listId;
   await projectList.render(listId);
+
+  storage.subscribe('list', listId, () => {
+    scheduleRemoteRender(() => projectList.render(listId));
+  });
 }
 
 function switchToDay() {
@@ -184,8 +235,16 @@ function setupFlushSaves() {
     });
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && document.activeElement) {
-      document.activeElement.blur();
+    if (document.visibilityState === 'hidden') {
+      if (document.activeElement) document.activeElement.blur();
+      storage.unsubscribe();
+    } else {
+      // Tab became visible — re-sync and re-subscribe
+      if (currentView === 'day') {
+        loadDay(currentDateKey);
+      } else if (currentView === 'project' && currentProjectId) {
+        loadProject(currentProjectId, currentListId);
+      }
     }
   });
 }

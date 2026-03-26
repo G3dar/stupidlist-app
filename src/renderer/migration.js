@@ -6,27 +6,38 @@ export async function checkAndMigrate(uid) {
   // Check if local has data
   await local.open();
   const localData = await local.exportAll();
-  const localHasData = localData.items.length > 0 || localData.projects.length > 0;
+
+  // Ignore empty items (no text)
+  const meaningfulItems = localData.items.filter(i => i.text && i.text.trim() !== '');
+  const localHasData = meaningfulItems.length > 0 || localData.projects.length > 0;
 
   if (!localHasData) {
     return { needsMigration: false };
   }
 
-  // Check if these local items were already uploaded (by matching IDs)
-  const snap = await getDocs(collection(firestore, 'users', uid, 'items'));
-  const cloudIds = new Set(snap.docs.map(d => d.id));
-  const newItems = localData.items.filter(i => !cloudIds.has(i.id));
-  const newProjects = localData.projects.filter(p => !cloudIds.has(p.id));
+  // Check which local items/projects/lists are actually new (not already in cloud)
+  const [itemsSnap, projSnap, listsSnap] = await Promise.all([
+    getDocs(collection(firestore, 'users', uid, 'items')),
+    getDocs(collection(firestore, 'users', uid, 'projects')),
+    getDocs(collection(firestore, 'users', uid, 'lists'))
+  ]);
 
-  // Also check projects
-  const projSnap = await getDocs(collection(firestore, 'users', uid, 'projects'));
+  const cloudItemIds = new Set(itemsSnap.docs.map(d => d.id));
   const cloudProjIds = new Set(projSnap.docs.map(d => d.id));
-  const uniqueProjects = newProjects.filter(p => !cloudProjIds.has(p.id));
+  const cloudListIds = new Set(listsSnap.docs.map(d => d.id));
 
-  const hasNewData = newItems.length > 0 || uniqueProjects.length > 0;
+  const newItems = meaningfulItems.filter(i => !cloudItemIds.has(i.id));
+  const newProjects = localData.projects.filter(p => !cloudProjIds.has(p.id));
+  const newLists = localData.lists.filter(l => !cloudListIds.has(l.id));
+
+  const hasNewData = newItems.length > 0 || newProjects.length > 0;
 
   if (hasNewData) {
-    return { needsMigration: true, localData };
+    // Only pass the truly new data to avoid duplicating existing items
+    return {
+      needsMigration: true,
+      localData: { items: newItems, projects: newProjects, lists: newLists }
+    };
   }
   return { needsMigration: false };
 }

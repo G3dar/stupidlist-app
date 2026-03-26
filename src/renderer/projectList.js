@@ -136,8 +136,8 @@ async function handleNewBelow(afterId) {
   }
 
   renumber();
-  await saveOrder();
-  item.focusText(li);
+  saveOrder();
+  setTimeout(() => item.focusText(li), 0);
 }
 
 async function handleDelete(id, element) {

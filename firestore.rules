@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // User data: only the owner can read/write
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Shared list items: anyone can read (needed for share links)
+    match /users/{userId}/items/{itemId} {
+      allow read: if true;
+    }
+
+    // Share codes: anyone can read, authenticated users can create
+    match /shares/{shareCode} {
+      allow read: if true;
+      allow create: if request.auth != null;
+    }
+  }
+}

@@ -20,13 +20,13 @@
   "build": {
     "appId": "app.stupidlist",
     "productName": "stupidlist",
-    "icon": "icons/brain_icon.png",
+    "icon": "icons/icon_new.png",
     "files": [
       "dist/**/*",
       "index.html",
       "src/main/index.js",
-      "icons/icon.ico",
-      "icons/brain_icon.png"
+      "icons/icon_new.ico",
+      "icons/icon_new.png"
     ],
     "win": {
       "target": [

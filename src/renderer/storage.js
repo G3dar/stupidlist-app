@@ -173,5 +173,38 @@ export async function pullFromCloud() {
   }
 }
 
+// ─── Real-time subscriptions ───
+
+let currentUnsub = null;
+
+export function subscribe(type, key, onRemoteChange) {
+  unsubscribe();
+  if (!authState.isLoggedIn) return;
+  if (document.visibilityState !== 'visible') return;
+
+  const handleChanges = async ({ upserted, removedIds }) => {
+    for (const item of upserted) {
+      await local.upsertItem(item);
+    }
+    for (const id of removedIds) {
+      await local.upsertItem({ id, deleted: true, updatedAt: Date.now() });
+    }
+    onRemoteChange();
+  };
+
+  if (type === 'day') {
+    currentUnsub = cloud.listenToDay(key, handleChanges);
+  } else if (type === 'list') {
+    currentUnsub = cloud.listenToList(key, handleChanges);
+  }
+}
+
+export function unsubscribe() {
+  if (currentUnsub) {
+    currentUnsub();
+    currentUnsub = null;
+  }
+}
+
 // Expose local backend for migration
 export { local };
