@@ -304,12 +304,15 @@ function showSharePopup(anchor, shareCode) {
   const baseUrl = window.location.origin || 'https://stupidlist.app';
   const url = `${baseUrl}/s/${shareCode}`;
 
+  // Auto-copy to clipboard immediately
+  navigator.clipboard.writeText(url);
+
   const popup = document.createElement('div');
   popup.className = 'share-popup';
 
   const label = document.createElement('div');
   label.className = 'share-popup-label';
-  label.textContent = 'Share link:';
+  label.textContent = 'Copied to clipboard';
 
   const urlRow = document.createElement('div');
   urlRow.className = 'share-popup-url-row';
@@ -322,10 +325,11 @@ function showSharePopup(anchor, shareCode) {
 
   const copyBtn = document.createElement('button');
   copyBtn.className = 'share-popup-copy';
-  copyBtn.textContent = 'Copy';
+  copyBtn.textContent = 'Copied!';
   copyBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(url);
     copyBtn.textContent = 'Copied!';
+    label.textContent = 'Copied to clipboard';
     setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
   });
 
