@@ -1,0 +1,226 @@
+import { toDateKey, formatDateLabel, addDays, getDayName } from '../shared/constants.js';
+import * as storage from './storage.js';
+import * as dayList from './dayList.js';
+import * as projectList from './projectList.js';
+import * as carryOver from './carryOver.js';
+import * as projectNav from './projectNav.js';
+import * as authUI from './authUI.js';
+import * as settings from './settings.js';
+import * as shareView from './shareView.js';
+
+let currentDateKey = toDateKey(new Date());
+let currentView = 'day'; // 'day' or 'project'
+let currentProjectId = null;
+let currentListId = null;
+
+export async function init() {
+  await storage.open();
+
+  projectNav.init({
+    onProjectSelect: loadProject,
+    onListSelect: loadList,
+    onBack: switchToDay
+  });
+
+  // Init auth UI with reload callback
+  authUI.init(async () => {
+    await storage.open();
+    if (currentView === 'day') {
+      await loadDay(currentDateKey);
+    } else if (currentView === 'project' && currentProjectId) {
+      await loadProject(currentProjectId, currentListId);
+    }
+  });
+
+  // Check for shared list URL
+  const shareCode = getShareCode();
+  if (shareCode) {
+    await shareView.load(shareCode);
+    return;
+  }
+
+  settings.init();
+  setupNavigation();
+  setupPasteAsItems();
+  setupFlushSaves();
+  await loadDay(currentDateKey);
+}
+
+async function loadDay(dateKey) {
+  currentView = 'day';
+  currentDateKey = dateKey;
+  currentProjectId = null;
+  currentListId = null;
+  updateDateDisplay();
+  await dayList.render(dateKey);
+
+  const today = toDateKey(new Date());
+  if (dateKey >= today) {
+    await carryOver.check(dateKey, () => dayList.render(dateKey));
+  } else {
+    document.getElementById('carry-over').innerHTML = '';
+  }
+}
+
+async function loadProject(projectId, listId) {
+  currentView = 'project';
+  currentProjectId = projectId;
+
+  // If no listId provided, get the first list
+  if (!listId) {
+    const lists = await storage.getListsForProject(projectId);
+    if (lists.length === 0) return;
+    listId = lists[0].id;
+  }
+
+  currentListId = listId;
+
+  // Hide carry-over in project mode
+  document.getElementById('carry-over').innerHTML = '';
+
+  // Update header
+  await projectNav.showProjectHeader(projectId, listId);
+
+  // Render items
+  await projectList.render(listId);
+}
+
+async function loadList(listId) {
+  currentListId = listId;
+  await projectList.render(listId);
+}
+
+function switchToDay() {
+  projectNav.restoreDayHeader();
+  loadDay(currentDateKey);
+}
+
+function updateDateDisplay() {
+  const label = document.getElementById('date-label');
+  const todayBtn = document.getElementById('btn-today');
+  const logo = document.querySelector('.logo');
+  const today = toDateKey(new Date());
+
+  label.textContent = formatDateLabel(currentDateKey);
+  logo.textContent = getDayName(currentDateKey);
+  todayBtn.classList.toggle('is-today', currentDateKey === today);
+}
+
+function setupNavigation() {
+  document.getElementById('btn-prev').addEventListener('click', () => navigateDay(-1));
+  document.getElementById('btn-next').addEventListener('click', () => navigateDay(1));
+  document.getElementById('btn-today').addEventListener('click', goToToday);
+
+  document.addEventListener('keydown', (e) => {
+    const active = document.activeElement;
+    const isEditing = active && active.contentEditable === 'true';
+
+    if (e.ctrlKey && e.key === 'ArrowLeft' && !isEditing && currentView === 'day') {
+      e.preventDefault();
+      navigateDay(-1);
+    }
+    if (e.ctrlKey && e.key === 'ArrowRight' && !isEditing && currentView === 'day') {
+      e.preventDefault();
+      navigateDay(1);
+    }
+
+    // Ctrl+Z: undo
+    if (e.ctrlKey && e.key === 'z' && !isEditing) {
+      e.preventDefault();
+      if (currentView === 'day') {
+        dayList.undo();
+      } else {
+        projectList.undo();
+      }
+    }
+
+    // Ctrl+E: export
+    if (e.ctrlKey && e.key === 'e') {
+      e.preventDefault();
+      exportData();
+    }
+
+    // Ctrl+0: reset zoom
+    if (e.ctrlKey && e.key === '0') {
+      e.preventDefault();
+      document.body.style.zoom = '100%';
+      localStorage.setItem('zoom', '100');
+    }
+  });
+
+  // Ctrl+mouse wheel zoom
+  document.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      const current = parseInt(localStorage.getItem('zoom') || '100');
+      const next = e.deltaY < 0 ? Math.min(current + 10, 200) : Math.max(current - 10, 50);
+      document.body.style.zoom = `${next}%`;
+      localStorage.setItem('zoom', String(next));
+    }
+  }, { passive: false });
+
+  // Restore zoom on load
+  const savedZoom = localStorage.getItem('zoom');
+  if (savedZoom) document.body.style.zoom = `${savedZoom}%`;
+}
+
+function navigateDay(offset) {
+  const newDate = addDays(currentDateKey, offset);
+  carryOver.reset();
+  loadDay(newDate);
+}
+
+function goToToday() {
+  carryOver.reset();
+  loadDay(toDateKey(new Date()));
+}
+
+function setupFlushSaves() {
+  if (window.stupidlist && window.stupidlist.onFlushSaves) {
+    window.stupidlist.onFlushSaves(() => {
+      if (document.activeElement) {
+        document.activeElement.blur();
+      }
+    });
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && document.activeElement) {
+      document.activeElement.blur();
+    }
+  });
+}
+
+function setupPasteAsItems() {
+  if (window.stupidlist && window.stupidlist.onPasteAsItems) {
+    window.stupidlist.onPasteAsItems((text) => {
+      if (currentView === 'day') {
+        dayList.pasteAsItems(text);
+      }
+    });
+  }
+}
+
+async function exportData() {
+  const data = await storage.exportAll();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `stupidlist-export-${toDateKey(new Date())}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getShareCode() {
+  // Check URL path: /s/{code}
+  const path = window.location.pathname;
+  const match = path.match(/^\/s\/([a-zA-Z0-9]+)$/);
+  if (match) return match[1];
+
+  // Check hash: #s/{code}
+  const hash = window.location.hash;
+  const hashMatch = hash.match(/^#s\/([a-zA-Z0-9]+)$/);
+  if (hashMatch) return hashMatch[1];
+
+  return null;
+}

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' https://apis.google.com https://*.firebaseapp.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com; frame-src https://accounts.google.com https://*.firebaseapp.com; img-src 'self' https://*.googleusercontent.com">
+  <title>stupidlist</title>
+  <link rel="stylesheet" href="../../dist/renderer-web.css">
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <div class="header-left">
+        <h1 class="logo">stupidlist</h1>
+      </div>
+      <div class="header-right">
+        <div id="day-nav">
+          <button id="btn-projects" class="nav-btn nav-projects" title="Projects">projects</button>
+          <button id="btn-prev" class="nav-btn" title="Previous day">&lsaquo;</button>
+          <span id="date-label" class="date-label"></span>
+          <button id="btn-next" class="nav-btn" title="Next day">&rsaquo;</button>
+          <button id="btn-today" class="nav-btn nav-today" title="Go to today">today</button>
+        </div>
+        <div id="list-nav" style="display:none"></div>
+      </div>
+      <button id="btn-settings" class="nav-btn nav-settings" title="Settings">⚙</button>
+      <div class="header-auth" id="auth-area"></div>
+    </header>
+    <div id="projects-dropdown" style="display:none"></div>
+    <main id="list-container">
+      <ul id="item-list"></ul>
+    </main>
+    <div id="carry-over"></div>
+  </div>
+  <script src="../../dist/renderer-web.js"></script>
+</body>
+</html>

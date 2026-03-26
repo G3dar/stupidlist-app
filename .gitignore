@@ -1,0 +1,8 @@
+node_modules/
+dist/
+public/renderer-web.js
+public/renderer-web.css
+*.log
+.DS_Store
+Thumbs.db
+.firebase/
