@@ -19,10 +19,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build installer
-        run: npm run dist:win
+        run: npm run build:all && npx electron-builder --win --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          WIN_CSC_LINK: ''
       - name: List dist output
         shell: bash
         run: ls -la dist/*.exe dist/*-win.zip 2>/dev/null || ls -la dist/
@@ -47,7 +46,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build installer
-        run: npm run dist:mac
+        run: npm run build:all && npx electron-builder --mac --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Upload to Release
