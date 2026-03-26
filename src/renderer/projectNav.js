@@ -6,6 +6,19 @@ let onListSelect = null;
 let onBack = null;
 let dropdownVisible = false;
 
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function init(callbacks) {
   onProjectSelect = callbacks.onProjectSelect;
   onListSelect = callbacks.onListSelect;
@@ -48,6 +61,18 @@ async function showDropdown() {
 
   for (const project of projects) {
     const lists = await storage.getListsForProject(project.id);
+
+    let totalItems = 0;
+    let lastUpdated = project.updatedAt || 0;
+    for (const list of lists) {
+      const items = await storage.getItemsForList(list.id);
+      totalItems += items.length;
+      if (list.updatedAt > lastUpdated) lastUpdated = list.updatedAt;
+      for (const item of items) {
+        if (item.updatedAt > lastUpdated) lastUpdated = item.updatedAt;
+      }
+    }
+
     const row = document.createElement('div');
     row.className = 'project-row';
 
@@ -57,10 +82,15 @@ async function showDropdown() {
 
     const count = document.createElement('span');
     count.className = 'project-row-count';
-    count.textContent = `${lists.length} list${lists.length !== 1 ? 's' : ''}`;
+    count.textContent = `${lists.length} list${lists.length !== 1 ? 's' : ''} · ${totalItems} item${totalItems !== 1 ? 's' : ''}`;
+
+    const updated = document.createElement('span');
+    updated.className = 'project-row-updated';
+    updated.textContent = lastUpdated ? timeAgo(lastUpdated) : '';
 
     row.appendChild(name);
     row.appendChild(count);
+    row.appendChild(updated);
 
     row.addEventListener('click', () => {
       hideDropdown();

@@ -247,6 +247,13 @@ header {
   color: var(--text-muted);
 }
 
+.project-row-updated {
+  font-size: 11px;
+  color: var(--text-dimmed);
+  margin-left: 12px;
+  white-space: nowrap;
+}
+
 .new-project-input {
   width: 100%;
   padding: 8px 12px;
