@@ -45,6 +45,8 @@ html, body {
 header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
   position: relative;
   padding-bottom: 16px;
   border-bottom: 2px solid var(--text);
@@ -61,6 +63,7 @@ header {
 
 .header-left {
   flex: 1;
+  min-width: 80px;
 }
 
 .header-right {
@@ -68,9 +71,16 @@ header {
   align-items: center;
   gap: 8px;
   -webkit-app-region: no-drag;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  flex-shrink: 0;
+}
+
+@media (max-width: 500px) {
+  .header-right {
+    order: 3;
+    flex: 1 0 100%;
+    justify-content: center;
+    padding-top: 4px;
+  }
 }
 
 .nav-btn {
@@ -805,10 +815,10 @@ header {
 }
 
 .item--child .item-number {
-  width: 40px;
+  width: 48px;
   font-size: var(--font-size);
   color: var(--text-muted);
-  padding-right: 6px;
+  padding-right: 8px;
 }
 
 /* New item input */
@@ -1285,14 +1295,51 @@ header {
   background: var(--text);
 }
 
+/* Touch long-press active state */
+.item.touch-active {
+  background: var(--accent-light);
+}
+
+/* Context menu delete item */
+.ctx-menu-item--danger {
+  color: #dc2626;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 8px;
+}
+
+.ctx-menu-item--danger:hover {
+  background: #fef2f2;
+}
+
 /* Responsive */
 @media (max-width: 480px) {
   #app {
-    padding: 12px 16px;
+    padding: 12px 12px;
   }
 
   .logo {
     font-size: 14px;
+  }
+
+  .nav-btn {
+    font-size: 14px;
+    padding: 2px 6px;
+  }
+
+  .nav-projects {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
+  .nav-today {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+
+  .date-label {
+    font-size: 13px;
+    min-width: 50px;
   }
 
   .item-number {
@@ -1300,7 +1347,46 @@ header {
     font-size: 11px;
   }
 
-  .item-state {
-    width: 36px;
+  /* Icon-only status on mobile */
+  .item-status {
+    min-width: auto;
+    font-size: 14px;
+    padding: 3px 6px;
+  }
+
+  .status-label {
+    display: none;
+  }
+
+  .item-text {
+    padding: 8px 2px;
+  }
+
+  .settings-dialog {
+    min-width: 280px;
+    max-width: calc(100vw - 24px);
+    margin: 0 12px;
+  }
+
+  .share-popup {
+    min-width: 0;
+    width: calc(100vw - 24px);
+    left: 12px !important;
+    right: 12px;
+  }
+
+  .ctx-menu {
+    max-width: calc(100vw - 16px);
+  }
+
+  .ctx-submenu {
+    left: auto;
+    right: 0;
+    top: 100%;
+  }
+
+  .migration-dialog {
+    max-width: calc(100vw - 24px);
+    margin: 0 12px;
   }
 }

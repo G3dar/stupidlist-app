@@ -20,8 +20,103 @@ export function create(itemData, callbacks) {
 
   // Right-click: context menu for project actions
   li.addEventListener('contextmenu', (e) => {
-    contextMenu.showForItem(e, itemData, onRefresh || (() => {}));
+    contextMenu.showForItem(e, itemData, onRefresh || (() => {}), () => onDelete(itemData.id, li));
   });
+
+  // Touch: long press (still) = context menu, long press + drag = reorder
+  {
+    let touchTimer = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let longPressed = false;
+    let dragging = false;
+    let dropTarget = null;
+
+    li.addEventListener('touchstart', (e) => {
+      if (e.target.closest('.item-status') || e.target.closest('.item-done')) return;
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      longPressed = false;
+      dragging = false;
+      dropTarget = null;
+
+      touchTimer = setTimeout(() => {
+        longPressed = true;
+        if (navigator.vibrate) navigator.vibrate(50);
+        li.classList.add('touch-active');
+      }, 500);
+    }, { passive: true });
+
+    li.addEventListener('touchmove', (e) => {
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (!longPressed) {
+        if (dist > 10) clearTimeout(touchTimer);
+        return;
+      }
+
+      // Long press active — start dragging
+      if (!dragging) {
+        dragging = true;
+        li.classList.add('dragging');
+        li.classList.remove('touch-active');
+      }
+
+      e.preventDefault();
+
+      // Find target item under finger
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const targetLi = el ? el.closest('.item') : null;
+
+      document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+      if (targetLi && targetLi !== li) {
+        targetLi.classList.add('drag-over');
+        dropTarget = targetLi;
+      } else {
+        dropTarget = null;
+      }
+    }, { passive: false });
+
+    li.addEventListener('touchend', (e) => {
+      clearTimeout(touchTimer);
+      li.classList.remove('touch-active');
+
+      if (dragging) {
+        li.classList.remove('dragging');
+        document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+        if (dropTarget && dropTarget.dataset.id !== itemData.id) {
+          onReorder(itemData.id, dropTarget.dataset.id);
+        }
+        dragging = false;
+        dropTarget = null;
+      } else if (longPressed) {
+        // Long press without drag = context menu
+        const touch = e.changedTouches[0];
+        const fakeEvent = {
+          preventDefault() {},
+          stopPropagation() {},
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          target: li
+        };
+        contextMenu.showForItem(fakeEvent, itemData, onRefresh || (() => {}), () => onDelete(itemData.id, li));
+      }
+
+      longPressed = false;
+    });
+
+    li.addEventListener('touchcancel', () => {
+      clearTimeout(touchTimer);
+      li.classList.remove('touch-active', 'dragging');
+      document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+      longPressed = false;
+      dragging = false;
+    });
+  }
 
   // Middle-click: delete if not_started, otherwise reset status
   li.addEventListener('mousedown', (e) => {
@@ -299,7 +394,7 @@ function updateStatusBtn(btn, status, statuses) {
     label = STATUS_LABELS[status] || '—';
     icon = STATUS_ICONS[status] || '○';
   }
-  btn.textContent = `${icon} ${label}`;
+  btn.innerHTML = `<span class="status-icon">${icon}</span><span class="status-label"> ${label}</span>`;
   btn.title = `Status: ${label}`;
   btn.dataset.status = status;
 }

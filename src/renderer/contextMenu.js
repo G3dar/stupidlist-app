@@ -51,7 +51,7 @@ const BG_COLORS = [
   { color: '#fff3e0', label: 'Orange' },
 ];
 
-export async function showForItem(e, itemData, onRefresh) {
+export async function showForItem(e, itemData, onRefresh, onDelete) {
   e.preventDefault();
 
   // Notify main process IMMEDIATELY (before any await) to suppress native menu
@@ -265,6 +265,19 @@ export async function showForItem(e, itemData, onRefresh) {
 
     tagItem.appendChild(tagSubmenu);
     menu.appendChild(tagItem);
+  }
+
+  // ── Delete option ──
+  if (onDelete) {
+    const deleteItem = document.createElement('div');
+    deleteItem.className = 'ctx-menu-item ctx-menu-item--danger';
+    deleteItem.textContent = 'Delete';
+    deleteItem.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      close();
+      onDelete();
+    });
+    menu.appendChild(deleteItem);
   }
 
   // If menu is empty (no selection, no projects), don't show
