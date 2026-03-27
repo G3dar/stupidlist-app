@@ -1,6 +1,6 @@
 import * as storage from './storage.js';
 import { FONT_COLORS, BG_COLORS } from './contextMenu.js';
-import { toDateKey } from '../shared/constants.js';
+import { toDateKey, addDays, addWorkingDays, nextMonday, formatDateLabel } from '../shared/constants.js';
 import * as undoManager from './undoManager.js';
 
 let active = false;
@@ -9,6 +9,7 @@ let ctx = null; // { type: 'day'|'list', id, onRefresh }
 let barEl = null;
 let colorPopupEl = null;
 let movePopupEl = null;
+let snoozePopupEl = null;
 
 export function isActive() {
   return active;
@@ -49,6 +50,7 @@ export function exit() {
   removeBar();
   closeColorPopup();
   closeMovePopup();
+  closeSnoozePopup();
 }
 
 export function reapply() {
@@ -110,6 +112,7 @@ function showBar() {
   const copyBtn = makeBtn('Copy', handleCopy);
   const colorBtn = makeBtn('Color', handleColor);
   const moveBtn = makeBtn('Move to...', handleMove);
+  const snoozeBtn = makeBtn('Snooze', handleSnooze);
   const deleteBtn = makeBtn('Delete', handleDelete, true);
 
   const doneBtn = document.createElement('button');
@@ -121,6 +124,7 @@ function showBar() {
   barEl.appendChild(copyBtn);
   barEl.appendChild(colorBtn);
   barEl.appendChild(moveBtn);
+  barEl.appendChild(snoozeBtn);
   barEl.appendChild(deleteBtn);
   barEl.appendChild(doneBtn);
 
@@ -405,4 +409,82 @@ function onMoveOutsideClick(e) {
   if (movePopupEl && !movePopupEl.contains(e.target)) {
     closeMovePopup();
   }
+}
+
+// ── Snooze Popup ──
+
+function closeSnoozePopup() {
+  if (snoozePopupEl) {
+    snoozePopupEl.remove();
+    snoozePopupEl = null;
+  }
+  document.removeEventListener('click', onSnoozeOutsideClick);
+}
+
+async function handleSnooze(e) {
+  if (selectedIds.size === 0) return;
+  closeSnoozePopup();
+  closeColorPopup();
+  closeMovePopup();
+
+  snoozePopupEl = document.createElement('div');
+  snoozePopupEl.className = 'multiselect-popup multiselect-popup--snooze';
+
+  const todayKey = toDateKey(new Date());
+  const options = [
+    { label: 'Tomorrow', dateKey: addDays(todayKey, 1) },
+    { label: 'In 3 working days', dateKey: addWorkingDays(todayKey, 3) },
+    { label: 'Next week', dateKey: nextMonday(todayKey) },
+    { label: 'In 2 weeks', dateKey: addDays(nextMonday(todayKey), 7) },
+  ];
+
+  for (const opt of options) {
+    const optItem = document.createElement('div');
+    optItem.className = 'ctx-menu-item';
+    optItem.innerHTML = `<span>${opt.label}</span><span class="ctx-snooze-date">${formatDateLabel(opt.dateKey)}</span>`;
+    optItem.addEventListener('click', () => snoozeSelected(opt.dateKey));
+    snoozePopupEl.appendChild(optItem);
+  }
+
+  const btnRect = e.target.getBoundingClientRect();
+  snoozePopupEl.style.left = `${btnRect.left}px`;
+  snoozePopupEl.style.bottom = `${window.innerHeight - btnRect.top + 8}px`;
+
+  document.body.appendChild(snoozePopupEl);
+
+  setTimeout(() => {
+    document.addEventListener('click', onSnoozeOutsideClick);
+  }, 0);
+}
+
+function onSnoozeOutsideClick(e) {
+  if (snoozePopupEl && !snoozePopupEl.contains(e.target)) {
+    closeSnoozePopup();
+  }
+}
+
+async function snoozeSelected(dateKey) {
+  undoManager.startBatch('snooze multiple');
+  for (const id of selectedIds) {
+    const snapshot = await storage.getItem(id);
+    let newItem;
+    if (snapshot && snapshot.listId) {
+      newItem = await storage.moveItemFromListToDay(id, dateKey);
+    } else {
+      newItem = await storage.moveItemToDay(id, dateKey);
+    }
+    if (snapshot && newItem) {
+      if (snapshot.listId) {
+        undoManager.push({ type: 'delete', entityType: 'item', id, data: { ...snapshot } });
+      } else {
+        undoManager.push({ type: 'update', entityType: 'item', id, before: { done: snapshot.done }, after: { done: true } });
+      }
+      undoManager.push({ type: 'create', entityType: 'item', id: newItem.id, data: { ...newItem } });
+    }
+  }
+  undoManager.endBatch();
+  const refresh = ctx?.onRefresh;
+  closeSnoozePopup();
+  exit();
+  if (refresh) refresh();
 }

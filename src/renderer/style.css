@@ -129,11 +129,16 @@ header {
   user-select: none;
 }
 
-/* Projects button */
-.nav-projects {
+/* Projects / Lists / New buttons */
+.nav-projects, .nav-new, .nav-lists {
   font-size: 11px;
   padding: 3px 10px;
   -webkit-app-region: no-drag;
+}
+
+.nav-new {
+  font-weight: 600;
+  color: #2c5494;
 }
 
 .nav-projects.active {
@@ -2050,16 +2055,15 @@ header {
 }
 
 .multiselect-active .item-select-cb {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: auto;
+  display: inline-flex;
+  align-self: center;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   cursor: pointer;
   accent-color: var(--accent);
-  margin: 0;
-  padding: 0 8px 0 0;
+  margin: 0 6px 0 0;
+  padding: 0;
 }
 
 .multiselect-active .item-text {
