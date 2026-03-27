@@ -67,6 +67,25 @@ export function addDays(dateKey, n) {
   return toDateKey(date);
 }
 
+export function addWorkingDays(dateKey, n) {
+  const date = dateKeyToDate(dateKey);
+  let remaining = n;
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1);
+    const dow = date.getDay();
+    if (dow !== 0 && dow !== 6) remaining--;
+  }
+  return toDateKey(date);
+}
+
+export function nextMonday(dateKey) {
+  const date = dateKeyToDate(dateKey);
+  const dow = date.getDay();
+  const daysUntilMonday = dow === 0 ? 1 : (8 - dow);
+  date.setDate(date.getDate() + daysUntilMonday);
+  return toDateKey(date);
+}
+
 export function generateId() {
   return crypto.randomUUID();
 }

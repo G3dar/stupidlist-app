@@ -8,10 +8,14 @@ import * as authUI from './authUI.js';
 import * as settings from './settings.js';
 import * as shareView from './shareView.js';
 import * as statsView from './statsView.js';
+import * as listsNav from './listsNav.js';
 import * as helpOverlay from './helpOverlay.js';
+import * as multiSelect from './multiSelect.js';
+import * as undoManager from './undoManager.js';
+import * as hashtagAutocomplete from './hashtagAutocomplete.js';
 
 let currentDateKey = toDateKey(new Date());
-let currentView = 'day'; // 'day' or 'project'
+let currentView = 'day'; // 'day', 'project', or 'standalone'
 let currentProjectId = null;
 let currentListId = null;
 let loadDayPromise = null;
@@ -70,6 +74,12 @@ export async function init() {
     onBack: switchToDay
   });
 
+  listsNav.init({
+    onNewList: loadStandaloneList,
+    onListSelect: loadStandaloneList,
+    onBack: switchToDay
+  });
+
   // Init auth UI with reload callback
   authUI.init(async () => {
     await storage.open();
@@ -77,11 +87,14 @@ export async function init() {
       await loadDay(currentDateKey);
     } else if (currentView === 'project' && currentProjectId) {
       await loadProject(currentProjectId, currentListId);
+    } else if (currentView === 'standalone' && currentListId) {
+      await loadStandaloneList(currentListId);
     }
   });
 
   settings.init();
   helpOverlay.init();
+  hashtagAutocomplete.init();
   setupNavigation();
   setupPasteAsItems();
   setupFlushSaves();
@@ -96,6 +109,7 @@ async function loadDay(dateKey) {
   loadDayPromise = new Promise(r => { resolve = r; });
 
   try {
+    multiSelect.exit();
     currentView = 'day';
     currentDateKey = dateKey;
     currentProjectId = null;
@@ -121,6 +135,7 @@ async function loadDay(dateKey) {
 }
 
 async function loadProject(projectId, listId) {
+  multiSelect.exit();
   currentView = 'project';
   currentProjectId = projectId;
 
@@ -155,6 +170,34 @@ async function loadList(listId) {
   storage.subscribe('list', listId, () => {
     scheduleRemoteRender(() => projectList.render(listId));
   });
+}
+
+async function loadStandaloneList(listId, autoFocusTitle) {
+  currentView = 'standalone';
+  currentListId = listId;
+  currentProjectId = null;
+
+  // Hide carry-over in standalone mode
+  document.getElementById('carry-over').innerHTML = '';
+
+  // Update header
+  await listsNav.showStandaloneListHeader(listId, autoFocusTitle);
+
+  // Render items (reuse project list renderer)
+  await projectList.render(listId);
+
+  // Subscribe to real-time updates
+  storage.subscribe('list', listId, () => {
+    scheduleRemoteRender(() => projectList.render(listId));
+  });
+}
+
+async function refreshCurrentView() {
+  if (currentView === 'day') {
+    await dayList.render(currentDateKey);
+  } else if (currentListId) {
+    await projectList.render(currentListId);
+  }
 }
 
 function switchToDay() {
@@ -193,13 +236,19 @@ function setupNavigation() {
     }
 
     // Ctrl+Z: undo
-    if (e.ctrlKey && e.key === 'z' && !isEditing) {
+    if (e.ctrlKey && !e.shiftKey && e.key === 'z' && !isEditing) {
       e.preventDefault();
-      if (currentView === 'day') {
-        dayList.undo();
-      } else {
-        projectList.undo();
-      }
+      undoManager.undo().then(() => refreshCurrentView());
+    }
+
+    // Ctrl+Y or Ctrl+Shift+Z: redo
+    if (e.ctrlKey && e.key === 'y' && !isEditing) {
+      e.preventDefault();
+      undoManager.redo().then(() => refreshCurrentView());
+    }
+    if (e.ctrlKey && e.shiftKey && e.key === 'Z' && !isEditing) {
+      e.preventDefault();
+      undoManager.redo().then(() => refreshCurrentView());
     }
 
     // Ctrl+E: export
@@ -261,6 +310,8 @@ function setupFlushSaves() {
         loadDay(currentDateKey);
       } else if (currentView === 'project' && currentProjectId) {
         loadProject(currentProjectId, currentListId);
+      } else if (currentView === 'standalone' && currentListId) {
+        loadStandaloneList(currentListId);
       }
     }
   });

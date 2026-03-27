@@ -1,5 +1,5 @@
 import { auth } from '../shared/firebase-config.js';
-import { GoogleAuthProvider, signInWithPopup, signInWithCredential, onAuthStateChanged } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithCredential, signInAnonymously as firebaseSignInAnon, onAuthStateChanged } from 'firebase/auth';
 
 export const authState = {
   isLoggedIn: false,
@@ -45,6 +45,11 @@ export async function signIn() {
 
 export async function signOut() {
   await auth.signOut();
+}
+
+export async function signInAnonymouslyIfNeeded() {
+  if (authState.isLoggedIn) return;
+  await firebaseSignInAnon(auth);
 }
 
 // Listen for auth state changes (also fires on page load with persisted session)

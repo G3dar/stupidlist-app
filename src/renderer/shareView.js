@@ -1,4 +1,8 @@
 import * as storage from './storage.js';
+import { signInAnonymouslyIfNeeded } from './auth.js';
+import * as projectList from './projectList.js';
+
+let sharedUnsub = null;
 
 export async function load(shareCode) {
   let shareData;
@@ -14,7 +18,7 @@ export async function load(shareCode) {
     return;
   }
 
-  const { ownerUid, listId, projectName, listName } = shareData;
+  const { ownerUid, listId, projectName, listName, writable } = shareData;
 
   // Hide normal UI elements
   document.getElementById('day-nav').style.display = 'none';
@@ -33,17 +37,45 @@ export async function load(shareCode) {
   // Show shared banner
   const banner = document.createElement('div');
   banner.className = 'share-banner';
-  banner.innerHTML = `<span>📋 <strong>${listName}</strong> — Shared list (read only)</span>`;
   const container = document.getElementById('list-container');
   container.parentNode.insertBefore(banner, container);
 
-  // Load and render items
-  try {
-    const items = await storage.getSharedListItems(ownerUid, listId);
-    renderReadOnly(items);
-  } catch (err) {
-    showError('Could not load shared list. The owner may need to update sharing permissions.');
+  if (writable) {
+    banner.classList.add('share-banner--writable');
+    banner.innerHTML = `<span>\u270F\uFE0F <strong>${listName}</strong> \u2014 Shared list (editable)</span>`;
+    await loadWriteView(ownerUid, listId);
+  } else {
+    banner.innerHTML = `<span>\uD83D\uDCCB <strong>${listName}</strong> \u2014 Shared list (read only)</span>`;
+    try {
+      const items = await storage.getSharedListItems(ownerUid, listId);
+      renderReadOnly(items);
+    } catch (err) {
+      showError('Could not load shared list. The owner may need to update sharing permissions.');
+    }
   }
+}
+
+async function loadWriteView(ownerUid, listId) {
+  try {
+    await signInAnonymouslyIfNeeded();
+  } catch (err) {
+    console.error('Anonymous auth error:', err);
+    showError('Could not connect. Please try again.');
+    return;
+  }
+
+  try {
+    await projectList.render(listId, { ownerUid });
+  } catch (err) {
+    console.error('Write view render error:', err);
+    showError('This share link has been revoked or is no longer valid.');
+    return;
+  }
+
+  // Real-time sync
+  sharedUnsub = storage.sharedListenToList(ownerUid, listId, () => {
+    projectList.render(listId, { ownerUid });
+  });
 }
 
 function renderReadOnly(items) {
@@ -110,7 +142,7 @@ function renderReadOnly(items) {
     // Done indicator
     const done = document.createElement('span');
     done.className = 'item-done';
-    done.textContent = itemData.done ? '☑' : '☐';
+    done.textContent = itemData.done ? '\u2611' : '\u2610';
 
     li.appendChild(num);
     li.appendChild(text);

@@ -1,5 +1,6 @@
 import * as storage from './storage.js';
 import { authState } from './auth.js';
+import * as undoManager from './undoManager.js';
 
 let onProjectSelect = null;
 let onListSelect = null;
@@ -101,6 +102,18 @@ async function showDropdown() {
     row.addEventListener('contextmenu', async (e) => {
       e.preventDefault();
       if (confirm(`Delete project "${project.name}"?`)) {
+        // Snapshot for undo before cascade delete
+        undoManager.startBatch('delete project');
+        const listsToDelete = await storage.getListsForProject(project.id);
+        for (const list of listsToDelete) {
+          const listItems = await storage.getItemsForList(list.id);
+          for (const item of listItems) {
+            undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
+          }
+          undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
+        }
+        undoManager.push({ type: 'delete', entityType: 'project', id: project.id, data: { ...project } });
+        undoManager.endBatch();
         await storage.deleteProject(project.id);
         await showDropdown();
       }
@@ -117,6 +130,12 @@ async function showDropdown() {
     if (e.key === 'Enter' && input.value.trim()) {
       const project = await storage.addProject(input.value.trim());
       const lists = await storage.getListsForProject(project.id);
+      undoManager.startBatch('create project');
+      undoManager.push({ type: 'create', entityType: 'project', id: project.id, data: { ...project } });
+      for (const l of lists) {
+        undoManager.push({ type: 'create', entityType: 'list', id: l.id, data: { ...l } });
+      }
+      undoManager.endBatch();
       hideDropdown();
       onProjectSelect(project.id, lists[0].id);
     }
@@ -141,6 +160,10 @@ export async function showProjectHeader(projectId, activeListId) {
   document.getElementById('day-nav').style.display = 'none';
   document.getElementById('list-nav').style.display = 'flex';
   projectsBtn.style.display = 'none';
+  const newListBtn = document.getElementById('btn-new-list');
+  const listsBtn = document.getElementById('btn-lists');
+  if (newListBtn) newListBtn.style.display = 'none';
+  if (listsBtn) listsBtn.style.display = 'none';
 
   // Replace logo with back button + project name
   logo.innerHTML = '';
@@ -168,9 +191,13 @@ export async function showProjectHeader(projectId, activeListId) {
 
     const save = async () => {
       const newName = input.value.trim() || project.name;
-      await storage.updateProject(projectId, { name: newName });
-      project.name = newName;
-      nameSpan.textContent = newName;
+      if (newName !== project.name) {
+        const oldName = project.name;
+        await storage.updateProject(projectId, { name: newName });
+        undoManager.push({ type: 'update', entityType: 'project', id: projectId, before: { name: oldName }, after: { name: newName } });
+        project.name = newName;
+      }
+      nameSpan.textContent = project.name;
       input.replaceWith(nameSpan);
     };
 
@@ -203,9 +230,13 @@ function startRenameTab(tab, list) {
 
   const save = async () => {
     const newName = input.value.trim() || list.name;
-    await storage.updateList(list.id, { name: newName });
-    list.name = newName;
-    tab.textContent = newName;
+    if (newName !== list.name) {
+      const oldName = list.name;
+      await storage.updateList(list.id, { name: newName });
+      undoManager.push({ type: 'update', entityType: 'list', id: list.id, before: { name: oldName }, after: { name: newName } });
+      list.name = newName;
+    }
+    tab.textContent = list.name;
     input.replaceWith(tab);
   };
 
@@ -247,6 +278,14 @@ async function renderListTabs(projectId, activeListId) {
       e.preventDefault();
       if (lists.length <= 1) return; // Don't delete the last list
       if (confirm(`Delete list "${list.name}"?`)) {
+        // Snapshot for undo
+        undoManager.startBatch('delete list');
+        const listItems = await storage.getItemsForList(list.id);
+        for (const item of listItems) {
+          undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
+        }
+        undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
+        undoManager.endBatch();
         await storage.deleteList(list.id);
         const remaining = await storage.getListsForProject(projectId);
         if (remaining.length > 0) {
@@ -266,6 +305,7 @@ async function renderListTabs(projectId, activeListId) {
   addBtn.title = 'New list';
   addBtn.addEventListener('click', async () => {
     const newList = await storage.addList(projectId, `List ${lists.length + 1}`);
+    undoManager.push({ type: 'create', entityType: 'list', id: newList.id, data: { ...newList } });
     onListSelect(newList.id);
     await renderListTabs(projectId, newList.id);
   });
@@ -292,6 +332,56 @@ async function renderListTabs(projectId, activeListId) {
 
       showSharePopup(shareBtn, shareCode);
     });
+
+    // Middle-click: toggle write share
+    shareBtn.addEventListener('auxclick', async (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+
+      const activeList = lists.find(l => l.id === activeListId);
+      if (!activeList) return;
+
+      const listData = await storage.getList(activeListId);
+
+      if (listData && listData.writeShareCode) {
+        // Revoke existing write share
+        await storage.revokeWriteShare(activeListId);
+        await storage.updateList(activeListId, { writeShareCode: null });
+        shareBtn.classList.remove('btn-share-list--write-active');
+        shareBtn.title = 'Write share revoked';
+        const origText = shareBtn.textContent;
+        shareBtn.textContent = '\u2717';
+        setTimeout(() => { shareBtn.textContent = origText; shareBtn.title = 'Share this list'; }, 1500);
+      } else {
+        // Generate new write share
+        const projects = await storage.getAllProjects();
+        const project = projects.find(p => p.id === projectId);
+        const shareCode = await storage.shareListForWrite(
+          activeListId,
+          projectId,
+          project ? project.name : 'Project',
+          activeList ? activeList.name : 'List'
+        );
+        await storage.updateList(activeListId, { writeShareCode: shareCode });
+        shareBtn.classList.add('btn-share-list--write-active');
+
+        const baseUrl = window.location.origin || 'https://stupidlist.app';
+        const url = `${baseUrl}/s/${shareCode}`;
+        await navigator.clipboard.writeText(url);
+
+        shareBtn.title = 'Write link copied!';
+        const origText = shareBtn.textContent;
+        shareBtn.textContent = '\u2713';
+        setTimeout(() => { shareBtn.textContent = origText; shareBtn.title = 'Share this list'; }, 1500);
+      }
+    });
+
+    // Show active write-share indicator
+    const listData = await storage.getList(activeListId);
+    if (listData && listData.writeShareCode) {
+      shareBtn.classList.add('btn-share-list--write-active');
+    }
+
     listNav.appendChild(shareBtn);
   }
 }
@@ -363,6 +453,10 @@ export function restoreDayHeader() {
   document.getElementById('day-nav').style.display = 'flex';
   document.getElementById('list-nav').style.display = 'none';
   document.getElementById('btn-projects').style.display = '';
+  const newListBtn = document.getElementById('btn-new-list');
+  const listsBtn = document.getElementById('btn-lists');
+  if (newListBtn) newListBtn.style.display = '';
+  if (listsBtn) listsBtn.style.display = '';
 
   hideDropdown();
 }

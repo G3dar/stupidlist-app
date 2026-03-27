@@ -3,9 +3,11 @@ import * as storage from './storage.js';
 import { markdownToHtml } from './formatting.js';
 import * as contextMenu from './contextMenu.js';
 import * as statusConfig from './statusConfig.js';
+import { getTagColor } from './tagColors.js';
+import * as undoManager from './undoManager.js';
 
 export function create(itemData, callbacks) {
-  const { onDelete, onNewBelow, onFocusPrev, onFocusNext, onReorder, onPasteMultiple, onIndent, onUnindent, onToggleDone, onConvertToSpacer, onRefresh, isParent } = callbacks;
+  const { onDelete, onNewBelow, onFocusPrev, onFocusNext, onReorder, onPasteMultiple, onIndent, onUnindent, onToggleDone, onConvertToSpacer, onRefresh, isParent, listContext } = callbacks;
 
   // Spacer: minimal half-height element
   if (itemData.isSpacer) {
@@ -26,6 +28,7 @@ export function create(itemData, callbacks) {
   li.dataset.id = itemData.id;
   if (itemData.depth > 0) li.classList.add('item--child');
   if (isParent) li.classList.add('item--parent');
+  if (itemData._isTagged) li.classList.add('item--tagged');
   applyClasses(li, itemData);
 
   // Apply saved colors
@@ -34,7 +37,7 @@ export function create(itemData, callbacks) {
 
   // Right-click: context menu for project actions
   li.addEventListener('contextmenu', (e) => {
-    contextMenu.showForItem(e, itemData, onRefresh || (() => {}), () => onDelete(itemData.id, li));
+    contextMenu.showForItem(e, itemData, onRefresh || (() => {}), () => onDelete(itemData.id, li), listContext);
   });
 
   // Touch: long press (still) = context menu, long press + drag = reorder
@@ -117,7 +120,7 @@ export function create(itemData, callbacks) {
           clientY: touch.clientY,
           target: li
         };
-        contextMenu.showForItem(fakeEvent, itemData, onRefresh || (() => {}), () => onDelete(itemData.id, li));
+        contextMenu.showForItem(fakeEvent, itemData, onRefresh || (() => {}), () => onDelete(itemData.id, li), listContext);
       }
 
       longPressed = false;
@@ -137,8 +140,10 @@ export function create(itemData, callbacks) {
     if (e.button === 1) {
       e.preventDefault();
       if (itemData.status !== 'not_started') {
+        const oldStatus = itemData.status;
         itemData.status = 'not_started';
         storage.updateItem(itemData.id, { status: 'not_started' });
+        undoManager.push({ type: 'update', entityType: 'item', id: itemData.id, before: { status: oldStatus }, after: { status: 'not_started' } });
         applyClasses(li, itemData);
         const statusBtn = li.querySelector('.item-status');
         if (statusBtn) updateStatusBtn(statusBtn, 'not_started');
@@ -200,7 +205,12 @@ export function create(itemData, callbacks) {
     text.innerHTML = hasHtml ? itemData.text : markdownToHtml(itemData.text);
   }
 
+  let textBeforeEdit = null;
+
   text.addEventListener('focus', () => {
+    // Capture text for undo
+    textBeforeEdit = itemData.text || '';
+
     // Keep HTML formatting — just move cursor to end
     const range = document.createRange();
     const sel = window.getSelection();
@@ -231,6 +241,11 @@ export function create(itemData, callbacks) {
   text.addEventListener('blur', () => {
     clearTimeout(saveTimer);
     saveText();
+    // Push undo entry for the whole edit session
+    if (textBeforeEdit !== null && itemData.text !== textBeforeEdit) {
+      undoManager.push({ type: 'update', entityType: 'item', id: itemData.id, before: { text: textBeforeEdit }, after: { text: itemData.text } });
+    }
+    textBeforeEdit = null;
   });
 
   text.addEventListener('paste', (e) => {
@@ -365,6 +380,9 @@ export function create(itemData, callbacks) {
     const tag = document.createElement('span');
     tag.className = 'item-tag';
     tag.textContent = `#${itemData.projectTag}`;
+    const colors = getTagColor(itemData.projectTag);
+    tag.style.backgroundColor = colors.bg;
+    tag.style.color = colors.text;
     li.appendChild(tag);
   }
 
@@ -395,8 +413,10 @@ function cycleStatus(li, itemData, statuses) {
   const currentIndex = cycle.indexOf(itemData.status);
   const nextStatus = cycle[(currentIndex + 1) % cycle.length];
 
+  const oldStatus = itemData.status;
   itemData.status = nextStatus;
   storage.updateItem(itemData.id, { status: nextStatus });
+  undoManager.push({ type: 'update', entityType: 'item', id: itemData.id, before: { status: oldStatus }, after: { status: nextStatus } });
 
   applyClasses(li, itemData);
   const statusBtn = li.querySelector('.item-status');

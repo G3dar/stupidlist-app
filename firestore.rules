@@ -3,14 +3,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // User data: only the owner can read/write
-    match /users/{userId}/{document=**} {
+    // User projects: owner only
+    match /users/{userId}/projects/{projectId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Shared list items: anyone can read (needed for share links)
+    // User lists: owner can read/write, anyone can read (needed for write-share validation)
+    match /users/{userId}/lists/{listId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // User items: anyone can read, owner always writes,
+    // others can write if the list has active write sharing
     match /users/{userId}/items/{itemId} {
       allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.resource.data.listId is string
+        && get(/databases/$(database)/documents/users/$(userId)/lists/$(request.resource.data.listId)).data.writeShareCode != null;
+    }
+
+    // Catch-all for other user subcollections (future-proof)
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
     // Share codes: anyone can read, authenticated users can create

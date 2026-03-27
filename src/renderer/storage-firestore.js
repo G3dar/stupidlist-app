@@ -27,6 +27,8 @@ function normalize(item) {
   if (item.status === 'wait' || item.status === 'later') item.status = 'waiting';
   if (item.parentId === undefined) item.parentId = null;
   if (item.depth === undefined) item.depth = 0;
+  if (item.tagListId === undefined) item.tagListId = null;
+  if (item.tagOrder === undefined) item.tagOrder = null;
   return item;
 }
 
@@ -205,17 +207,59 @@ export async function deleteList(id) {
   await updateDoc(userDoc('lists', id), { deleted: true, updatedAt: Date.now() });
 
   const items = await getItemsForList(id);
-  for (const item of items) {
-    await deleteItem(item.id);
+  for (const i of items) {
+    if (i._isTagged) {
+      await updateItem(i.id, { tagListId: null, tagOrder: null, projectId: null, projectTag: null });
+    } else {
+      await deleteItem(i.id);
+    }
   }
+}
+
+// ─── Standalone Lists ───
+
+export async function getStandaloneLists() {
+  const q = query(userCol('lists'), where('projectId', '==', null), where('deleted', '==', false));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data()).sort((a, b) => a.order - b.order);
+}
+
+export async function getList(listId) {
+  const ref = userDoc('lists', listId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return data.deleted ? null : data;
+}
+
+export async function moveListToProject(listId, projectId) {
+  const ref = userDoc('lists', listId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+
+  const targetLists = await getListsForProject(projectId);
+  const updated = { projectId, order: targetLists.length, updatedAt: Date.now() };
+  await updateDoc(ref, updated);
+  return { ...snap.data(), ...updated };
 }
 
 // ─── List Items (project items) ───
 
 export async function getItemsForList(listId) {
-  const q = query(userCol('items'), where('listId', '==', listId), where('deleted', '==', false));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => normalize(d.data())).sort((a, b) => a.order - b.order);
+  const nativeQ = query(userCol('items'), where('listId', '==', listId), where('deleted', '==', false));
+  const taggedQ = query(userCol('items'), where('tagListId', '==', listId), where('deleted', '==', false));
+  const [nativeSnap, taggedSnap] = await Promise.all([getDocs(nativeQ), getDocs(taggedQ)]);
+
+  const nativeItems = nativeSnap.docs.map(d => normalize(d.data()));
+  const taggedItems = taggedSnap.docs.map(d => { const item = normalize(d.data()); item._isTagged = true; return item; });
+  const nativeIds = new Set(nativeItems.map(i => i.id));
+  const uniqueTagged = taggedItems.filter(i => !nativeIds.has(i.id));
+
+  return [...nativeItems, ...uniqueTagged].sort((a, b) => {
+    const orderA = a._isTagged ? (a.tagOrder ?? 999999) : a.order;
+    const orderB = b._isTagged ? (b.tagOrder ?? 999999) : b.order;
+    return orderA - orderB;
+  });
 }
 
 export async function addItemToList(listId, text = '') {
@@ -245,8 +289,17 @@ export async function reorderListItems(listId, orderedIds) {
   const batch = writeBatch(firestore);
   const now = Date.now();
 
+  // Fetch items to determine which are tagged vs native
+  const refs = orderedIds.map(id => getDoc(userDoc('items', id)));
+  const snaps = await Promise.all(refs);
+
   for (let i = 0; i < orderedIds.length; i++) {
-    batch.update(userDoc('items', orderedIds[i]), { order: i, updatedAt: now });
+    const data = snaps[i].exists() ? snaps[i].data() : null;
+    if (data && data.tagListId === listId && data.listId !== listId) {
+      batch.update(userDoc('items', orderedIds[i]), { tagOrder: i, updatedAt: now });
+    } else {
+      batch.update(userDoc('items', orderedIds[i]), { order: i, updatedAt: now });
+    }
   }
 
   await batch.commit();
@@ -290,8 +343,8 @@ export async function upsertList(data) {
 
 export async function shareList(listId, projectId, projectName, listName) {
   const shareCode = generateId().replace(/-/g, '').slice(0, 8);
-  const shareDoc = doc(firestore, 'shares', shareCode);
-  await setDoc(shareDoc, {
+  const shareRef = doc(firestore, 'shares', shareCode);
+  await setDoc(shareRef, {
     ownerUid: getUid(),
     listId,
     projectId,
@@ -302,11 +355,47 @@ export async function shareList(listId, projectId, projectName, listName) {
   return shareCode;
 }
 
+export async function shareListForWrite(listId, projectId, projectName, listName) {
+  const shareCode = generateId().replace(/-/g, '').slice(0, 8);
+  const shareRef = doc(firestore, 'shares', shareCode);
+  await setDoc(shareRef, {
+    ownerUid: getUid(),
+    listId,
+    projectId,
+    projectName,
+    listName,
+    createdAt: Date.now(),
+    writable: true
+  });
+  // Enable write sharing on the list document (checked by Firestore rules)
+  await updateDoc(userDoc('lists', listId), { writeShareCode: shareCode, updatedAt: Date.now() });
+  return shareCode;
+}
+
+export async function revokeWriteShare(listId) {
+  await updateDoc(userDoc('lists', listId), { writeShareCode: null, updatedAt: Date.now() });
+}
+
 export async function getSharedList(shareCode) {
-  const shareDoc = doc(firestore, 'shares', shareCode);
-  const snap = await getDoc(shareDoc);
+  const shareRef = doc(firestore, 'shares', shareCode);
+  const snap = await getDoc(shareRef);
   if (!snap.exists()) return null;
-  return snap.data();
+  const data = snap.data();
+
+  // For writable shares, verify the write share is still active
+  if (data.writable) {
+    try {
+      const listRef = doc(firestore, 'users', data.ownerUid, 'lists', data.listId);
+      const listSnap = await getDoc(listRef);
+      if (!listSnap.exists() || listSnap.data().writeShareCode !== shareCode) {
+        data.writable = false; // downgrade to read-only
+      }
+    } catch (err) {
+      data.writable = false;
+    }
+  }
+
+  return data;
 }
 
 export async function getSharedListItems(ownerUid, listId) {
@@ -314,6 +403,71 @@ export async function getSharedListItems(ownerUid, listId) {
   const q = query(itemsCol, where('listId', '==', listId), where('deleted', '==', false), orderBy('order'));
   const snap = await getDocs(q);
   return snap.docs.map(d => normalize(d.data())).sort((a, b) => a.order - b.order);
+}
+
+// ─── Shared-write operations (target another user's data) ───
+
+export async function sharedAddItemToList(ownerUid, listId, text = '') {
+  const existing = await getSharedListItems(ownerUid, listId);
+  const maxOrder = existing.length > 0 ? Math.max(...existing.map(i => i.order)) + 1 : 0;
+  const item = {
+    id: generateId(),
+    dayDate: null,
+    listId,
+    order: maxOrder,
+    text,
+    done: false,
+    status: 'not_started',
+    parentId: null,
+    depth: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    deleted: false
+  };
+  await setDoc(doc(firestore, 'users', ownerUid, 'items', item.id), item);
+  return item;
+}
+
+export async function sharedUpdateItem(ownerUid, id, changes) {
+  const ref = doc(firestore, 'users', ownerUid, 'items', id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const updated = { ...changes, updatedAt: Date.now() };
+  await updateDoc(ref, updated);
+  return { ...snap.data(), ...updated };
+}
+
+export async function sharedDeleteItem(ownerUid, id) {
+  const ref = doc(firestore, 'users', ownerUid, 'items', id);
+  await updateDoc(ref, { deleted: true, updatedAt: Date.now() });
+}
+
+export async function sharedReorderListItems(ownerUid, listId, orderedIds) {
+  const batch = writeBatch(firestore);
+  const now = Date.now();
+  for (let i = 0; i < orderedIds.length; i++) {
+    batch.update(doc(firestore, 'users', ownerUid, 'items', orderedIds[i]), { order: i, updatedAt: now });
+  }
+  await batch.commit();
+}
+
+export function sharedListenToList(ownerUid, listId, callback) {
+  const itemsCol = collection(firestore, 'users', ownerUid, 'items');
+  const q = query(itemsCol, where('listId', '==', listId), where('deleted', '==', false));
+  return onSnapshot(q, (snapshot) => {
+    const remoteChanges = snapshot.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+    if (remoteChanges.length === 0) return;
+    const upserted = [];
+    const removedIds = [];
+    for (const change of remoteChanges) {
+      if (change.type === 'added' || change.type === 'modified') {
+        upserted.push(normalize(change.doc.data()));
+      } else if (change.type === 'removed') {
+        removedIds.push(change.doc.data().id);
+      }
+    }
+    callback({ upserted, removedIds });
+  });
 }
 
 // ─── Real-time listeners ───
@@ -338,8 +492,7 @@ export function listenToDay(dayDate, callback) {
 }
 
 export function listenToList(listId, callback) {
-  const q = query(userCol('items'), where('listId', '==', listId), where('deleted', '==', false));
-  return onSnapshot(q, (snapshot) => {
+  const processSnapshot = (snapshot) => {
     const remoteChanges = snapshot.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
     if (remoteChanges.length === 0) return;
 
@@ -353,7 +506,13 @@ export function listenToList(listId, callback) {
       }
     }
     callback({ upserted, removedIds });
-  });
+  };
+
+  const nativeQ = query(userCol('items'), where('listId', '==', listId), where('deleted', '==', false));
+  const taggedQ = query(userCol('items'), where('tagListId', '==', listId), where('deleted', '==', false));
+  const unsub1 = onSnapshot(nativeQ, processSnapshot);
+  const unsub2 = onSnapshot(taggedQ, processSnapshot);
+  return () => { unsub1(); unsub2(); };
 }
 
 export function listenToProjects(callback) {

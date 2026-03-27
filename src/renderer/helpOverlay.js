@@ -5,7 +5,8 @@ const tips = [
   // Below the first item — single multi-line bubble
   { target: '.item:first-child .item-number', lines: [
     { key: 'Tab', text: 'indent as sub-item' },
-    { key: 'Ctrl+Z', text: 'undo delete' },
+    { key: 'Ctrl+Z', text: 'undo' },
+    { key: 'Ctrl+Y', text: 'redo' },
     { key: 'wheel click', text: 'delete item' },
     { key: 'right-click', text: 'choose color' },
   ], pos: 'bottom' },

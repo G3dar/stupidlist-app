@@ -1,6 +1,6 @@
 import { DB_NAME, ITEMS_STORE, PROJECTS_STORE, LISTS_STORE, generateId, migrateState } from '../shared/constants.js';
 
-const DB_VER = 3;
+const DB_VER = 4;
 let db = null;
 
 export function open() {
@@ -18,6 +18,7 @@ export function open() {
         store.createIndex('byDay', 'dayDate', { unique: false });
         store.createIndex('byDayOrder', ['dayDate', 'order'], { unique: false });
         store.createIndex('byList', 'listId', { unique: false });
+        store.createIndex('byTagList', 'tagListId', { unique: false });
       } else {
         const store = tx.objectStore(ITEMS_STORE);
         if (store.indexNames.contains('byState')) {
@@ -28,6 +29,9 @@ export function open() {
         }
         if (!store.indexNames.contains('byList')) {
           store.createIndex('byList', 'listId', { unique: false });
+        }
+        if (!store.indexNames.contains('byTagList')) {
+          store.createIndex('byTagList', 'tagListId', { unique: false });
         }
       }
 
@@ -66,6 +70,8 @@ function normalize(item) {
   if (item.status === 'wait' || item.status === 'later') item.status = 'waiting';
   if (item.parentId === undefined) item.parentId = null;
   if (item.depth === undefined) item.depth = 0;
+  if (item.tagListId === undefined) item.tagListId = null;
+  if (item.tagOrder === undefined) item.tagOrder = null;
   return item;
 }
 
@@ -79,6 +85,22 @@ function promisify(req) {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+}
+
+// ─── Single-entity reads (for undo snapshots) ───
+
+export async function getItem(id) {
+  await open();
+  const store = getStore();
+  const item = await promisify(store.get(id));
+  return item && !item.deleted ? normalize(item) : null;
+}
+
+export async function getProject(id) {
+  await open();
+  const store = getStore(PROJECTS_STORE);
+  const project = await promisify(store.get(id));
+  return project && !project.deleted ? project : null;
 }
 
 // ─── Day Items ───
@@ -301,11 +323,45 @@ export async function deleteList(id) {
   list.updatedAt = Date.now();
   await promisify(store.put(list));
 
-  // Soft-delete all items in this list
+  // Soft-delete native items, untag tagged items
   const items = await getItemsForList(id);
-  for (const item of items) {
-    await deleteItem(item.id);
+  for (const i of items) {
+    if (i._isTagged) {
+      await untagItem(i.id);
+    } else {
+      await deleteItem(i.id);
+    }
   }
+}
+
+// ─── Standalone Lists ───
+
+export async function getStandaloneLists() {
+  await open();
+  const store = getStore(LISTS_STORE);
+  const all = await promisify(store.getAll());
+  return all
+    .filter(l => !l.deleted && (l.projectId === null || l.projectId === undefined))
+    .sort((a, b) => a.order - b.order);
+}
+
+export async function getList(listId) {
+  await open();
+  const store = getStore(LISTS_STORE);
+  const list = await promisify(store.get(listId));
+  return (list && !list.deleted) ? list : null;
+}
+
+export async function moveListToProject(listId, projectId) {
+  await open();
+  const store = getStore(LISTS_STORE, 'readwrite');
+  const list = await promisify(store.get(listId));
+  if (!list) return null;
+
+  const targetLists = await getListsForProject(projectId);
+  Object.assign(list, { projectId, order: targetLists.length, updatedAt: Date.now() });
+  await promisify(store.put(list));
+  return list;
 }
 
 // ─── List Items (project items) ───
@@ -313,18 +369,32 @@ export async function deleteList(id) {
 export async function getItemsForList(listId) {
   await open();
   const store = getStore();
-  const index = store.index('byList');
-  const items = await promisify(index.getAll(listId));
-  return items
+
+  const nativeItems = await promisify(store.index('byList').getAll(listId));
+  const taggedItems = await promisify(store.index('byTagList').getAll(listId));
+
+  // Mark tagged items with runtime flag
+  taggedItems.forEach(i => { i._isTagged = true; });
+  const nativeIds = new Set(nativeItems.map(i => i.id));
+  const uniqueTagged = taggedItems.filter(i => !nativeIds.has(i.id));
+
+  const all = [...nativeItems, ...uniqueTagged];
+  return all
     .filter(i => !i.deleted)
     .map(normalize)
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => {
+      const orderA = a._isTagged ? (a.tagOrder ?? 999999) : a.order;
+      const orderB = b._isTagged ? (b.tagOrder ?? 999999) : b.order;
+      return orderA - orderB;
+    });
 }
 
 export async function addItemToList(listId, text = '') {
   await open();
   const existing = await getItemsForList(listId);
-  const maxOrder = existing.length > 0 ? Math.max(...existing.map(i => i.order)) + 1 : 0;
+  // Only consider native items' order for new items
+  const nativeItems = existing.filter(i => !i._isTagged);
+  const maxOrder = nativeItems.length > 0 ? Math.max(...nativeItems.map(i => i.order)) + 1 : 0;
 
   const item = {
     id: generateId(),
@@ -355,7 +425,12 @@ export async function reorderListItems(listId, orderedIds) {
   for (let i = 0; i < orderedIds.length; i++) {
     const item = await promisify(store.get(orderedIds[i]));
     if (item) {
-      item.order = i;
+      // Tagged items update tagOrder, native items update order
+      if (item.tagListId === listId && item.listId !== listId) {
+        item.tagOrder = i;
+      } else {
+        item.order = i;
+      }
       item.updatedAt = now;
       store.put(item);
     }
@@ -365,6 +440,35 @@ export async function reorderListItems(listId, orderedIds) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+// ─── Tagging ───
+
+export async function tagItemToList(itemId, listId, projectId, projectTag) {
+  await open();
+  // Calculate tagOrder: max tagOrder of tagged items in target list + 1
+  const store = getStore();
+  const taggedItems = await promisify(store.index('byTagList').getAll(listId));
+  const nativeItems = await promisify(store.index('byList').getAll(listId));
+  const allInList = [...nativeItems, ...taggedItems].filter(i => !i.deleted);
+  const maxOrder = allInList.length > 0
+    ? Math.max(...allInList.map(i => i.tagListId === listId ? (i.tagOrder ?? 0) : i.order)) + 1
+    : 0;
+
+  return updateItem(itemId, { tagListId: listId, tagOrder: maxOrder, projectId, projectTag });
+}
+
+export async function untagItem(itemId) {
+  return updateItem(itemId, { tagListId: null, tagOrder: null, projectId: null, projectTag: null });
+}
+
+export async function getOrCreateDefaultTagList(projectId) {
+  const lists = await getListsForProject(projectId);
+  let tagList = lists.find(l => l.name === 'Tagged');
+  if (!tagList) {
+    tagList = await addList(projectId, 'Tagged');
+  }
+  return tagList;
 }
 
 // ─── Move between contexts ───

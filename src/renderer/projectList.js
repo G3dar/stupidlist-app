@@ -1,20 +1,37 @@
 import * as storage from './storage.js';
 import * as item from './item.js';
+import * as multiSelect from './multiSelect.js';
+import * as undoManager from './undoManager.js';
 
 let currentListId = null;
 let itemsCache = [];
-const undoStack = [];
 let showDone = localStorage.getItem('showDone') !== 'false';
+let sharedCtx = null; // null or { ownerUid }
 
-export async function render(listId) {
+function stg() {
+  if (!sharedCtx) return storage;
+  const uid = sharedCtx.ownerUid;
+  return {
+    getItemsForList: (lid) => storage.getSharedListItems(uid, lid),
+    addItemToList: (lid, t) => storage.sharedAddItemToList(uid, lid, t),
+    updateItem: (id, c) => storage.sharedUpdateItem(uid, id, c),
+    deleteItem: (id) => storage.sharedDeleteItem(uid, id),
+    reorderListItems: (lid, ids) => storage.sharedReorderListItems(uid, lid, ids),
+    getItem: () => Promise.resolve(null),
+  };
+}
+
+export async function render(listId, sharedContext = null) {
+  sharedCtx = sharedContext;
   currentListId = listId;
   const list = document.getElementById('item-list');
+  list.innerHTML = '<li class="list-loading"></li>';
+
+  const items = await stg().getItemsForList(listId);
   list.innerHTML = '';
 
-  const items = await storage.getItemsForList(listId);
-
   if (items.length === 0) {
-    const newItem = await storage.addItemToList(listId, '');
+    const newItem = await stg().addItemToList(listId, '');
     items.push(newItem);
   }
 
@@ -50,7 +67,7 @@ export async function render(listId) {
     btn.addEventListener('click', () => {
       showDone = !showDone;
       localStorage.setItem('showDone', showDone);
-      render(currentListId);
+      render(currentListId, sharedCtx);
     });
     const eye = document.createElement('span');
     eye.className = 'done-toggle-eye';
@@ -72,6 +89,7 @@ export async function render(listId) {
   }
 
   renumber();
+  multiSelect.reapply();
 }
 
 function createItemElement(itemData, isParent = false) {
@@ -86,18 +104,23 @@ function createItemElement(itemData, isParent = false) {
     onUnindent: handleUnindent,
     onToggleDone: handleToggleDone,
     onConvertToSpacer: handleConvertToSpacer,
-    onRefresh: () => render(currentListId),
-    isParent
+    onRefresh: () => render(currentListId, sharedCtx),
+    isParent,
+    listContext: { type: 'list', id: currentListId, onRefresh: () => render(currentListId, sharedCtx), isSharedView: !!sharedCtx }
   });
 }
 
 async function handleConvertToSpacer(id, li) {
-  await storage.updateItem(id, { isSpacer: true });
-  await render(currentListId);
+  const before = sharedCtx ? null : await storage.getItem(id);
+  await stg().updateItem(id, { isSpacer: true });
+  if (before) {
+    undoManager.push({ type: 'update', entityType: 'item', id, before: { isSpacer: before.isSpacer || false }, after: { isSpacer: true } });
+  }
+  await render(currentListId, sharedCtx);
 }
 
 async function handleToggleDone(id, li) {
-  const items = await storage.getItemsForList(currentListId);
+  const items = await stg().getItemsForList(currentListId);
   const targetItem = items.find(i => i.id === id);
   if (!targetItem) return;
 
@@ -105,16 +128,20 @@ async function handleToggleDone(id, li) {
   const parentIds = new Set(items.filter(i => i.parentId).map(i => i.parentId));
   const isParent = parentIds.has(id);
 
-  await storage.updateItem(id, { done: newDone });
+  if (!sharedCtx) undoManager.startBatch('toggle done');
+  if (!sharedCtx) undoManager.push({ type: 'update', entityType: 'item', id, before: { done: targetItem.done }, after: { done: newDone } });
+  await stg().updateItem(id, { done: newDone });
 
   if (isParent) {
     const children = items.filter(i => i.parentId === id);
     for (const child of children) {
-      await storage.updateItem(child.id, { done: newDone });
+      if (!sharedCtx) undoManager.push({ type: 'update', entityType: 'item', id: child.id, before: { done: child.done }, after: { done: newDone } });
+      await stg().updateItem(child.id, { done: newDone });
     }
   }
+  if (!sharedCtx) undoManager.endBatch();
 
-  await render(currentListId);
+  await render(currentListId, sharedCtx);
 }
 
 async function handleNewBelow(afterId) {
@@ -122,16 +149,18 @@ async function handleNewBelow(afterId) {
   const domItems = Array.from(list.children);
   const afterIndex = domItems.findIndex(li => li.dataset.id === afterId);
 
-  const items = await storage.getItemsForList(currentListId);
+  const items = await stg().getItemsForList(currentListId);
   const afterItem = items.find(i => i.id === afterId);
 
-  const newItemData = await storage.addItemToList(currentListId, '');
+  const newItemData = await stg().addItemToList(currentListId, '');
 
   if (afterItem && afterItem.parentId) {
-    await storage.updateItem(newItemData.id, { parentId: afterItem.parentId, depth: 1 });
+    await stg().updateItem(newItemData.id, { parentId: afterItem.parentId, depth: 1 });
     newItemData.parentId = afterItem.parentId;
     newItemData.depth = 1;
   }
+
+  if (!sharedCtx) undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
 
   const li = createItemElement(newItemData, false);
 
@@ -154,22 +183,36 @@ async function handleDelete(id, element) {
 
   const index = domItems.indexOf(element);
 
-  const items = await storage.getItemsForList(currentListId);
+  const items = await stg().getItemsForList(currentListId);
   const deletedItem = items.find(i => i.id === id);
   const parentId = deletedItem ? deletedItem.parentId : null;
 
-  if (deletedItem) {
-    undoStack.push({ ...deletedItem });
-    if (undoStack.length > 10) undoStack.shift();
+  // Tagged items: untag instead of deleting
+  if (deletedItem && deletedItem._isTagged && !sharedCtx) {
+    undoManager.push({ type: 'update', entityType: 'item', id, before: { tagListId: deletedItem.tagListId, tagOrder: deletedItem.tagOrder, projectId: deletedItem.projectId, projectTag: deletedItem.projectTag }, after: { tagListId: null, tagOrder: null, projectId: null, projectTag: null } });
+    await storage.untagItem(id);
+    element.remove();
+    renumber();
+    await saveOrder();
+    const remaining = Array.from(list.children);
+    if (remaining.length > 0) {
+      const focusIndex = Math.max(0, index - 1);
+      item.focusText(remaining[focusIndex]);
+    }
+    return;
   }
 
-  await storage.deleteItem(id);
+  if (deletedItem && !sharedCtx) {
+    undoManager.push({ type: 'delete', entityType: 'item', id, data: { ...deletedItem } });
+  }
+
+  await stg().deleteItem(id);
   element.remove();
 
   if (parentId) {
     const remainingChildren = items.filter(i => i.parentId === parentId && i.id !== id && !i.deleted);
     if (remainingChildren.length === 0) {
-      await render(currentListId);
+      await render(currentListId, sharedCtx);
       return;
     }
   }
@@ -194,32 +237,38 @@ async function handleIndent(id, li) {
   const prevLi = domItems[index - 1];
   const prevId = prevLi.dataset.id;
 
-  const items = await storage.getItemsForList(currentListId);
+  const items = await stg().getItemsForList(currentListId);
   const prevItem = items.find(i => i.id === prevId);
+  const currentItem = items.find(i => i.id === id);
+  const oldParentId = currentItem ? currentItem.parentId : null;
+  const oldDepth = currentItem ? currentItem.depth : 0;
 
   if (prevItem && prevItem.depth > 0) {
     const parentId = prevItem.parentId;
     if (parentId) {
-      await storage.updateItem(id, { parentId: parentId, depth: 1 });
-      await render(currentListId);
+      if (!sharedCtx) undoManager.push({ type: 'update', entityType: 'item', id, before: { parentId: oldParentId, depth: oldDepth }, after: { parentId: parentId, depth: 1 } });
+      await stg().updateItem(id, { parentId: parentId, depth: 1 });
+      await render(currentListId, sharedCtx);
     }
     return;
   }
 
-  await storage.updateItem(id, { parentId: prevId, depth: 1 });
-  await render(currentListId);
+  if (!sharedCtx) undoManager.push({ type: 'update', entityType: 'item', id, before: { parentId: oldParentId, depth: oldDepth }, after: { parentId: prevId, depth: 1 } });
+  await stg().updateItem(id, { parentId: prevId, depth: 1 });
+  await render(currentListId, sharedCtx);
 
   const newLi = document.querySelector(`[data-id="${id}"]`);
   if (newLi) item.focusText(newLi);
 }
 
 async function handleUnindent(id, li) {
-  const items = await storage.getItemsForList(currentListId);
+  const items = await stg().getItemsForList(currentListId);
   const currentItem = items.find(i => i.id === id);
   if (!currentItem || !currentItem.parentId) return;
 
-  await storage.updateItem(id, { parentId: null, depth: 0 });
-  await render(currentListId);
+  if (!sharedCtx) undoManager.push({ type: 'update', entityType: 'item', id, before: { parentId: currentItem.parentId, depth: currentItem.depth }, after: { parentId: null, depth: 0 } });
+  await stg().updateItem(id, { parentId: null, depth: 0 });
+  await render(currentListId, sharedCtx);
 
   const newLi = document.querySelector(`[data-id="${id}"]`);
   if (newLi) item.focusText(newLi);
@@ -242,17 +291,19 @@ async function handlePasteMultiple(afterId, lines) {
   const domItems = Array.from(list.children);
   let afterIndex = domItems.findIndex(li => li.dataset.id === afterId);
 
-  const items = await storage.getItemsForList(currentListId);
+  const items = await stg().getItemsForList(currentListId);
   const afterItem = items.find(i => i.id === afterId);
   const inheritParent = afterItem && afterItem.parentId;
 
+  if (!sharedCtx) undoManager.startBatch('paste multiple');
   for (const lineText of lines) {
-    const newItemData = await storage.addItemToList(currentListId, lineText);
+    const newItemData = await stg().addItemToList(currentListId, lineText);
     if (inheritParent) {
-      await storage.updateItem(newItemData.id, { parentId: afterItem.parentId, depth: 1 });
+      await stg().updateItem(newItemData.id, { parentId: afterItem.parentId, depth: 1 });
       newItemData.parentId = afterItem.parentId;
       newItemData.depth = 1;
     }
+    if (!sharedCtx) undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
     const li = createItemElement(newItemData, false);
     const currentItems = Array.from(list.children);
 
@@ -263,6 +314,7 @@ async function handlePasteMultiple(afterId, lines) {
     }
     afterIndex++;
   }
+  if (!sharedCtx) undoManager.endBatch();
 
   renumber();
   await saveOrder();
@@ -278,17 +330,13 @@ async function handleReorder(draggedId, targetId) {
 
   if (!draggedEl || !targetEl) return;
 
+  const beforeIds = Array.from(list.children).map(li => li.dataset.id);
   list.insertBefore(draggedEl, targetEl);
+  const afterIds = Array.from(list.children).map(li => li.dataset.id);
+  if (!sharedCtx) undoManager.push({ type: 'reorder', context: { listId: currentListId }, beforeIds, afterIds });
 
   renumber();
   await saveOrder();
-}
-
-export async function undo() {
-  if (undoStack.length === 0) return;
-  const itemData = undoStack.pop();
-  await storage.updateItem(itemData.id, { deleted: false });
-  await render(currentListId);
 }
 
 function renumber() {
@@ -313,5 +361,5 @@ function renumber() {
 async function saveOrder() {
   const list = document.getElementById('item-list');
   const ids = Array.from(list.children).map(li => li.dataset.id).filter(Boolean);
-  await storage.reorderListItems(currentListId, ids);
+  await stg().reorderListItems(currentListId, ids);
 }

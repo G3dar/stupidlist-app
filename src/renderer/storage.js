@@ -19,12 +19,16 @@ export async function open() {
 
 // ─── Reads (always local — instant) ───
 
+export function getItem(id) { return local.getItem(id); }
+export function getProject(id) { return local.getProject(id); }
 export function getItemsForDay(d) { return local.getItemsForDay(d); }
 export function getChildrenOf(p, d) { return local.getChildrenOf(p, d); }
 export function getIncompleteItems(b) { return local.getIncompleteItems(b); }
 export function getAllProjects() { return local.getAllProjects(); }
 export function getListsForProject(pid) { return local.getListsForProject(pid); }
 export function getItemsForList(lid) { return local.getItemsForList(lid); }
+export function getStandaloneLists() { return local.getStandaloneLists(); }
+export function getList(id) { return local.getList(id); }
 export function exportAll() { return local.exportAll(); }
 
 // ─── Writes (local first, cloud background via upsert) ───
@@ -83,6 +87,18 @@ export async function deleteProject(id) {
   syncToCloud(() => cloud.deleteProject(id));
 }
 
+export async function addStandaloneList(name) {
+  const list = await local.addList(null, name);
+  syncToCloud(() => cloud.upsertList(list));
+  return list;
+}
+
+export async function moveListToProject(lid, pid) {
+  const list = await local.moveListToProject(lid, pid);
+  if (list) syncToCloud(() => cloud.upsertList(list));
+  return list;
+}
+
 export async function addList(pid, n) {
   const list = await local.addList(pid, n);
   syncToCloud(() => cloud.upsertList(list));
@@ -111,6 +127,24 @@ export async function reorderListItems(lid, ids) {
   syncToCloud(() => cloud.reorderListItems(lid, ids));
 }
 
+export async function tagItemToList(itemId, listId, projectId, projectTag) {
+  const item = await local.tagItemToList(itemId, listId, projectId, projectTag);
+  if (item) syncToCloud(() => cloud.upsertItem(item));
+  return item;
+}
+
+export async function untagItem(itemId) {
+  const item = await local.untagItem(itemId);
+  if (item) syncToCloud(() => cloud.upsertItem(item));
+  return item;
+}
+
+export async function getOrCreateDefaultTagList(projectId) {
+  const list = await local.getOrCreateDefaultTagList(projectId);
+  syncToCloud(() => cloud.upsertList(list));
+  return list;
+}
+
 export async function moveItemToList(iid, lid) {
   const newItem = await local.moveItemToList(iid, lid);
   syncToCloud(async () => {
@@ -132,8 +166,15 @@ export async function moveItemFromListToDay(iid, d) {
 // ─── Sharing (cloud only) ───
 
 export function shareList(lid, pid, pn, ln) { return cloud.shareList(lid, pid, pn, ln); }
+export function shareListForWrite(lid, pid, pn, ln) { return cloud.shareListForWrite(lid, pid, pn, ln); }
+export function revokeWriteShare(lid) { return cloud.revokeWriteShare(lid); }
 export function getSharedList(code) { return cloud.getSharedList(code); }
 export function getSharedListItems(uid, lid) { return cloud.getSharedListItems(uid, lid); }
+export function sharedAddItemToList(uid, lid, t) { return cloud.sharedAddItemToList(uid, lid, t); }
+export function sharedUpdateItem(uid, id, c) { return cloud.sharedUpdateItem(uid, id, c); }
+export function sharedDeleteItem(uid, id) { return cloud.sharedDeleteItem(uid, id); }
+export function sharedReorderListItems(uid, lid, ids) { return cloud.sharedReorderListItems(uid, lid, ids); }
+export function sharedListenToList(uid, lid, cb) { return cloud.sharedListenToList(uid, lid, cb); }
 
 // ─── Cloud → Local sync (on login / app load) ───
 

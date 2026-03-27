@@ -1,17 +1,19 @@
 import * as storage from './storage.js';
 import * as item from './item.js';
+import * as multiSelect from './multiSelect.js';
+import * as undoManager from './undoManager.js';
 
 let currentDayDate = null;
 let itemsCache = []; // cached item data for the current day
-const undoStack = []; // max 10 deleted items for Ctrl+Z restore
 let showDone = localStorage.getItem('showDone') !== 'false'; // default true
 
 export async function render(dayDate) {
   currentDayDate = dayDate;
   const list = document.getElementById('item-list');
-  list.innerHTML = '';
+  list.innerHTML = '<li class="list-loading"></li>';
 
   const items = await storage.getItemsForDay(dayDate);
+  list.innerHTML = '';
 
   if (items.length === 0) {
     const newItem = await storage.addItem(dayDate, '');
@@ -77,6 +79,7 @@ export async function render(dayDate) {
   }
 
   renumber();
+  multiSelect.reapply();
 }
 
 function createItemElement(itemData, isParent = false) {
@@ -92,12 +95,17 @@ function createItemElement(itemData, isParent = false) {
     onToggleDone: handleToggleDone,
     onConvertToSpacer: handleConvertToSpacer,
     onRefresh: () => render(currentDayDate),
-    isParent
+    isParent,
+    listContext: { type: 'day', id: currentDayDate, onRefresh: () => render(currentDayDate) }
   });
 }
 
 async function handleConvertToSpacer(id, li) {
+  const before = await storage.getItem(id);
   await storage.updateItem(id, { isSpacer: true });
+  if (before) {
+    undoManager.push({ type: 'update', entityType: 'item', id, before: { isSpacer: before.isSpacer || false }, after: { isSpacer: true } });
+  }
   await render(currentDayDate);
 }
 
@@ -110,16 +118,22 @@ async function handleToggleDone(id, li) {
   const parentIds = new Set(items.filter(i => i.parentId).map(i => i.parentId));
   const isParent = parentIds.has(id);
 
+  undoManager.startBatch('toggle done');
+
   // Toggle done on this item
+  undoManager.push({ type: 'update', entityType: 'item', id, before: { done: targetItem.done }, after: { done: newDone } });
   await storage.updateItem(id, { done: newDone });
 
   // If it's a parent, toggle all children too
   if (isParent) {
     const children = items.filter(i => i.parentId === id);
     for (const child of children) {
+      undoManager.push({ type: 'update', entityType: 'item', id: child.id, before: { done: child.done }, after: { done: newDone } });
       await storage.updateItem(child.id, { done: newDone });
     }
   }
+
+  undoManager.endBatch();
 
   // Re-render the whole list to reorder
   await render(currentDayDate);
@@ -142,6 +156,8 @@ async function handleNewBelow(afterId) {
     newItemData.parentId = afterItem.parentId;
     newItemData.depth = 1;
   }
+
+  undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
 
   const isParent = false;
   const li = createItemElement(newItemData, isParent);
@@ -170,10 +186,9 @@ async function handleDelete(id, element) {
   const deletedItem = items.find(i => i.id === id);
   const parentId = deletedItem ? deletedItem.parentId : null;
 
-  // Push to undo stack before deleting
+  // Push to undo manager before deleting
   if (deletedItem) {
-    undoStack.push({ ...deletedItem });
-    if (undoStack.length > 10) undoStack.shift();
+    undoManager.push({ type: 'delete', entityType: 'item', id, data: { ...deletedItem } });
   }
 
   await storage.deleteItem(id);
@@ -214,11 +229,17 @@ async function handleIndent(id, li) {
   const items = await storage.getItemsForDay(currentDayDate);
   const prevItem = items.find(i => i.id === prevId);
 
+  // Get current item for undo snapshot
+  const currentItem = items.find(i => i.id === id);
+  const oldParentId = currentItem ? currentItem.parentId : null;
+  const oldDepth = currentItem ? currentItem.depth : 0;
+
   // Don't indent under a child (only 1 level deep)
   if (prevItem && prevItem.depth > 0) {
     // Find the parent of the prev item instead
     const parentId = prevItem.parentId;
     if (parentId) {
+      undoManager.push({ type: 'update', entityType: 'item', id, before: { parentId: oldParentId, depth: oldDepth }, after: { parentId: parentId, depth: 1 } });
       await storage.updateItem(id, { parentId: parentId, depth: 1 });
       await render(currentDayDate);
     }
@@ -226,6 +247,7 @@ async function handleIndent(id, li) {
   }
 
   // Make this item a child of the previous item
+  undoManager.push({ type: 'update', entityType: 'item', id, before: { parentId: oldParentId, depth: oldDepth }, after: { parentId: prevId, depth: 1 } });
   await storage.updateItem(id, { parentId: prevId, depth: 1 });
 
   // Re-render to update parent/child display
@@ -244,6 +266,7 @@ async function handleUnindent(id, li) {
   const oldParentId = currentItem.parentId;
 
   // Remove parent relationship
+  undoManager.push({ type: 'update', entityType: 'item', id, before: { parentId: oldParentId, depth: currentItem.depth }, after: { parentId: null, depth: 0 } });
   await storage.updateItem(id, { parentId: null, depth: 0 });
 
   // Re-render
@@ -276,6 +299,7 @@ async function handlePasteMultiple(afterId, lines) {
   const afterItem = items.find(i => i.id === afterId);
   const inheritParent = afterItem && afterItem.parentId;
 
+  undoManager.startBatch('paste multiple');
   for (const lineText of lines) {
     const newItemData = await storage.addItem(currentDayDate, lineText);
     if (inheritParent) {
@@ -283,6 +307,7 @@ async function handlePasteMultiple(afterId, lines) {
       newItemData.parentId = afterItem.parentId;
       newItemData.depth = 1;
     }
+    undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
     const li = createItemElement(newItemData, false);
     const currentItems = Array.from(list.children);
 
@@ -293,6 +318,7 @@ async function handlePasteMultiple(afterId, lines) {
     }
     afterIndex++;
   }
+  undoManager.endBatch();
 
   renumber();
   await saveOrder();
@@ -308,7 +334,13 @@ async function handleReorder(draggedId, targetId) {
 
   if (!draggedEl || !targetEl) return;
 
+  // Snapshot order before reorder
+  const beforeIds = Array.from(list.children).map(li => li.dataset.id);
+
   list.insertBefore(draggedEl, targetEl);
+
+  const afterIds = Array.from(list.children).map(li => li.dataset.id);
+  undoManager.push({ type: 'reorder', context: { dayDate: currentDayDate }, beforeIds, afterIds });
 
   renumber();
   await saveOrder();
@@ -337,8 +369,10 @@ export async function pasteAsItems(text) {
   let domItems = Array.from(list.children);
   let afterIndex = afterId ? domItems.findIndex(li => li.dataset.id === afterId) : domItems.length - 1;
 
+  undoManager.startBatch('paste as items');
   for (const lineText of lines) {
     const newItemData = await storage.addItem(currentDayDate, lineText);
+    undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
     const li = createItemElement(newItemData, false);
     const currentItems = Array.from(list.children);
 
@@ -349,19 +383,13 @@ export async function pasteAsItems(text) {
     }
     afterIndex++;
   }
+  undoManager.endBatch();
 
   renumber();
   await saveOrder();
 
   const lastNew = list.children[afterIndex];
   if (lastNew) item.focusText(lastNew);
-}
-
-export async function undo() {
-  if (undoStack.length === 0) return;
-  const itemData = undoStack.pop();
-  await storage.updateItem(itemData.id, { deleted: false });
-  await render(currentDayDate);
 }
 
 function renumber() {
