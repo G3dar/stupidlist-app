@@ -7,6 +7,7 @@ import * as projectNav from './projectNav.js';
 import * as authUI from './authUI.js';
 import * as settings from './settings.js';
 import * as shareView from './shareView.js';
+import * as statsView from './statsView.js';
 import * as helpOverlay from './helpOverlay.js';
 
 let currentDateKey = toDateKey(new Date());
@@ -33,14 +34,27 @@ function scheduleRemoteRender(renderFn) {
 // Flush deferred remote render when user finishes editing
 document.addEventListener('blur', () => {
   if (pendingRemoteRender) {
-    const fn = pendingRemoteRender;
-    pendingRemoteRender = null;
-    fn();
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active.closest && active.closest('.item-text')) return;
+      if (pendingRemoteRender) {
+        const fn = pendingRemoteRender;
+        pendingRemoteRender = null;
+        fn();
+      }
+    }, 150);
   }
 }, true); // capture phase to catch contentEditable blur
 
 export async function init() {
   await storage.open();
+
+  // Check for stats page
+  if (isStatsPage()) {
+    authUI.init(() => {});
+    await statsView.load();
+    return;
+  }
 
   // Check for shared list URL before setting up normal UI
   const shareCode = getShareCode();
@@ -270,6 +284,10 @@ async function exportData() {
   a.download = `stupidlist-export-${toDateKey(new Date())}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function isStatsPage() {
+  return /^\/stats\/?$/.test(window.location.pathname);
 }
 
 function getShareCode() {
