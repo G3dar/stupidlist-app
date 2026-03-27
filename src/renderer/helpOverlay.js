@@ -2,21 +2,24 @@ let visible = false;
 let backdrop = null;
 
 const tips = [
-  // Item row tips - anchored to first item's sub-elements
-  { target: '.item:first-child .item-number', text: 'drag to reorder', pos: 'left' },
-  { target: '.item:first-child .item-text', key: 'Tab', text: 'indent as sub-item', pos: 'bottom' },
+  // Below the first item — single multi-line bubble
+  { target: '.item:first-child .item-number', lines: [
+    { key: 'Tab', text: 'indent as sub-item' },
+    { key: 'Ctrl+Z', text: 'undo delete' },
+    { key: 'wheel click', text: 'delete item' },
+    { key: 'right-click', text: 'choose color' },
+  ], pos: 'bottom' },
+
+  // Status tips — below the status button
   { target: '.item:first-child .item-status', lines: [
     { key: 'click', text: 'cycle status' },
     { key: 'right-click', text: 'configure' },
     { key: 'wheel click', text: 'remove status' },
   ], pos: 'bottom' },
-  { target: '.item:first-child .item-done', key: 'wheel click', text: 'delete item', pos: 'bottom' },
 
   // Header tips
-  { target: '#btn-prev', key: 'Ctrl+← →', text: 'navigate days', pos: 'bottom' },
-  { target: null, key: 'Ctrl+Z', text: 'undo delete', pos: 'floating' },
   { target: '.btn-download', text: 'download desktop app', pos: 'bottom' },
-  { target: '.auth-btn,.auth-user', text: 'sign in to sync across devices', pos: 'bottom' },
+  { target: '.auth-btn,.auth-user', text: 'to sync across devices', pos: 'bottom' },
 ];
 
 export function init() {
