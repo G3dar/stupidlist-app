@@ -177,6 +177,7 @@ function setupNavigation() {
   document.getElementById('btn-prev').addEventListener('click', () => navigateDay(-1));
   document.getElementById('btn-next').addEventListener('click', () => navigateDay(1));
   document.getElementById('btn-today').addEventListener('click', goToToday);
+  document.getElementById('btn-copy-list').addEventListener('click', copyListToClipboard);
 
   document.addEventListener('keydown', (e) => {
     const active = document.activeElement;
@@ -273,6 +274,27 @@ function setupPasteAsItems() {
       }
     });
   }
+}
+
+async function copyListToClipboard() {
+  const list = document.getElementById('item-list');
+  const items = Array.from(list.children);
+  const lines = [];
+  for (const li of items) {
+    if (li.classList.contains('item--spacer') || li.classList.contains('done-toggle')) continue;
+    const text = li.querySelector('.item-text');
+    if (text && text.textContent.trim()) {
+      const num = li.querySelector('.item-number');
+      const prefix = num ? num.textContent + ' ' : '';
+      lines.push(prefix + text.textContent.trim());
+    }
+  }
+  const btn = document.getElementById('btn-copy-list');
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = '⧉'; }, 1500);
+  } catch {}
 }
 
 async function exportData() {
