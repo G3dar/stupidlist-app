@@ -54,7 +54,7 @@
       if (!isMac && !isWin) return;
       btn.title = isMac ? 'Download for Mac' : 'Download for Windows';
       fetch('https://api.github.com/repos/G3dar/stupidlist-app/releases/latest')
-        .then(function(r) { return r.json(); })
+        .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(function(release) {
           if (!release.assets) return;
           var ext = isMac ? '.dmg' : '.exe';

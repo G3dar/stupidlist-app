@@ -3,7 +3,7 @@ import { getUid } from './auth.js';
 import { generateId, migrateState } from '../shared/constants.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, updateDoc,
-  query, where, orderBy, writeBatch, onSnapshot
+  query, where, orderBy, writeBatch, onSnapshot, increment, arrayUnion
 } from 'firebase/firestore';
 
 function userCol(name) {
@@ -538,4 +538,31 @@ export async function exportAll() {
     projects: projectsSnap.docs.map(d => d.data()),
     lists: listsSnap.docs.map(d => d.data())
   };
+}
+
+// ─── Login tracking ───
+
+export async function recordLogin(user) {
+  const today = new Date().toISOString().slice(0, 10);
+  const loginRef = doc(firestore, 'logins', user.uid);
+  await setDoc(loginRef, {
+    uid: user.uid,
+    email: user.email || '',
+    displayName: user.displayName || '',
+    photoURL: user.photoURL || '',
+    createdAt: user.metadata.creationTime || '',
+    lastLoginAt: Date.now(),
+    loginCount: increment(1),
+    loginDays: arrayUnion(today),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    language: navigator.language,
+    platform: navigator.platform,
+    screenSize: `${screen.width}x${screen.height}`,
+    userAgent: navigator.userAgent,
+  }, { merge: true });
+}
+
+export async function getAllLogins() {
+  const snap = await getDocs(collection(firestore, 'logins'));
+  return snap.docs.map(d => d.data());
 }

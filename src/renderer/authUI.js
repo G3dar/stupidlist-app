@@ -1,6 +1,6 @@
 import { signIn, signOut, onAuthChange } from './auth.js';
 import { checkAndMigrate, uploadLocalData } from './migration.js';
-import { pullFromCloud } from './storage.js';
+import { pullFromCloud, recordLogin } from './storage.js';
 import { clearAll } from './storage-local.js';
 
 let authArea = null;
@@ -14,6 +14,7 @@ export function init(reloadCallback) {
   onAuthChange(async (user) => {
     render(user);
     if (user) {
+      recordLogin(user).catch(() => {});
       // Migration dialog is user-facing — no timeout
       try {
         await handleMigration(user.uid);

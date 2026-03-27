@@ -176,6 +176,11 @@ export function sharedDeleteItem(uid, id) { return cloud.sharedDeleteItem(uid, i
 export function sharedReorderListItems(uid, lid, ids) { return cloud.sharedReorderListItems(uid, lid, ids); }
 export function sharedListenToList(uid, lid, cb) { return cloud.sharedListenToList(uid, lid, cb); }
 
+// ─── Login tracking (cloud only) ───
+
+export function recordLogin(user) { return cloud.recordLogin(user); }
+export function getAllLogins() { return cloud.getAllLogins(); }
+
 // ─── Cloud → Local sync (on login / app load) ───
 
 export async function pullFromCloud() {
