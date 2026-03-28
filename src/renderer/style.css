@@ -77,32 +77,27 @@ header {
 }
 
 .btn-new {
-  font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--accent);
-  border: none;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   cursor: pointer;
   padding: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 22px;
+  height: 22px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.1s;
   flex-shrink: 0;
 }
 
 .btn-new:hover {
-  background: #2563eb;
-  transform: scale(1.05);
-}
-
-.btn-new:active {
-  transform: scale(0.95);
+  background: var(--accent-light);
 }
 
 .header-left {
@@ -1840,10 +1835,9 @@ header {
   }
 
   .btn-new {
-    width: 26px;
-    height: 26px;
-    font-size: 16px;
-    border-radius: 6px;
+    width: 20px;
+    height: 20px;
+    font-size: 14px;
   }
 
   .nav-projects {
