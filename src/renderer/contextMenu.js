@@ -438,6 +438,25 @@ export async function showForItem(e, itemData, onRefresh, onDelete, listContext)
     menu.appendChild(snoozeItem);
   }
 
+  // ── Restart numbering option ──
+  if (!listContext || !listContext.isSharedView) {
+    const restartItem = document.createElement('div');
+    restartItem.className = 'ctx-menu-item';
+    const hasRestart = !!itemData.numberRestart;
+    restartItem.textContent = hasRestart ? 'Remove restart' : 'Restart numbering';
+    restartItem.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      close();
+      const newVal = !hasRestart;
+      const oldVal = hasRestart;
+      await storage.updateItem(itemData.id, { numberRestart: newVal || null });
+      undoManager.push({ type: 'update', entityType: 'item', id: itemData.id, before: { numberRestart: oldVal || null }, after: { numberRestart: newVal || null } });
+      itemData.numberRestart = newVal;
+      onRefresh();
+    });
+    menu.appendChild(restartItem);
+  }
+
   // ── Delete option ──
   if (onDelete) {
     const deleteItem = document.createElement('div');

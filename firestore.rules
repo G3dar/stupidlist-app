@@ -29,16 +29,17 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Share codes: anyone can read, authenticated users can create
+    // Share codes: anyone can read, authenticated users can create, owner can delete
     match /shares/{shareCode} {
       allow read: if true;
       allow create: if request.auth != null;
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
     }
 
     // Login tracking: users write own, admin reads all
     match /logins/{uid} {
       allow write: if request.auth != null && request.auth.uid == uid;
-      allow read: if request.auth != null && request.auth.uid == 'KFfqUUNM5TO46nXKzXybMKpxRv43';
+      allow read: if request.auth != null && request.auth.uid == 'KffqUUNM5TO46nXKzXybMKpxRv43';
     }
   }
 }

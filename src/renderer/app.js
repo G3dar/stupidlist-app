@@ -71,12 +71,17 @@ export async function init() {
   projectNav.init({
     onProjectSelect: loadProject,
     onListSelect: loadList,
+    onMoveList: (projectId, listId) => {
+      if (projectId) loadProject(projectId, listId);
+      else loadStandaloneList(listId);
+    },
     onBack: switchToDay
   });
 
   listsNav.init({
     onNewList: loadStandaloneList,
     onListSelect: loadStandaloneList,
+    onMoveToProject: loadProject,
     onBack: switchToDay
   });
 

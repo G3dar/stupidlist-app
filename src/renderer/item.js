@@ -29,6 +29,7 @@ export function create(itemData, callbacks) {
   if (itemData.depth > 0) li.classList.add('item--child');
   if (isParent) li.classList.add('item--parent');
   if (itemData._isTagged) li.classList.add('item--tagged');
+  if (itemData.numberRestart) li.classList.add('item--restart');
   applyClasses(li, itemData);
 
   // Apply saved colors
@@ -459,11 +460,12 @@ function isOnFirstLine(el) {
   startRange.setStart(el, 0);
   startRange.collapse(true);
 
-  const cursorRect = cursorRange.getBoundingClientRect();
-  const startRect = startRange.getBoundingClientRect();
+  const cursorRects = cursorRange.getClientRects();
+  const startRects = startRange.getClientRects();
+  if (!cursorRects.length || !startRects.length) return true;
 
   const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 24;
-  return Math.abs(cursorRect.top - startRect.top) < lineHeight * 0.5;
+  return Math.abs(cursorRects[0].top - startRects[0].top) < lineHeight * 0.5;
 }
 
 function isOnLastLine(el) {
@@ -478,14 +480,15 @@ function isOnLastLine(el) {
   endRange.selectNodeContents(el);
   endRange.collapse(false);
 
-  const cursorRect = cursorRange.getBoundingClientRect();
-  const endRect = endRange.getBoundingClientRect();
+  const cursorRects = cursorRange.getClientRects();
+  const endRects = endRange.getClientRects();
+  if (!cursorRects.length || !endRects.length) return true;
 
   const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 24;
-  return Math.abs(cursorRect.top - endRect.top) < lineHeight * 0.5;
+  return Math.abs(cursorRects[0].top - endRects[0].top) < lineHeight * 0.5;
 }
 
-export function focusText(li) {
+export function focusText(li, atStart = false) {
   const text = li.querySelector('.item-text');
   if (text) {
     text.focus();
@@ -493,7 +496,7 @@ export function focusText(li) {
     const sel = window.getSelection();
     if (text.childNodes.length > 0) {
       range.selectNodeContents(text);
-      range.collapse(false);
+      range.collapse(atStart);
     } else {
       range.setStart(text, 0);
       range.collapse(true);

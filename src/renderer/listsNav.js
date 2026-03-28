@@ -5,6 +5,7 @@ import { showDeleteConfirm } from './deleteConfirm.js';
 
 let onNewList = null;
 let onListSelect = null;
+let onMoveToProject = null;
 let onBack = null;
 let dropdownVisible = false;
 
@@ -24,6 +25,7 @@ function timeAgo(ts) {
 export function init(callbacks) {
   onNewList = callbacks.onNewList;
   onListSelect = callbacks.onListSelect;
+  onMoveToProject = callbacks.onMoveToProject;
   onBack = callbacks.onBack;
 
   document.getElementById('btn-new-list').addEventListener('click', handleNewList);
@@ -156,7 +158,7 @@ function showListContextMenu(e, list) {
   // Move to project option
   const moveItem = document.createElement('div');
   moveItem.className = 'lists-ctx-item';
-  moveItem.textContent = 'Move to project';
+  moveItem.textContent = 'Move to...';
   moveItem.addEventListener('click', async (ev) => {
     ev.stopPropagation();
     menu.remove();
@@ -203,24 +205,53 @@ async function showMoveToProjectMenu(e, list) {
   menu.style.zIndex = '9999';
 
   const projects = await storage.getAllProjects();
+  const currentProjectId = list.projectId || null;
+
+  // "Lists" option — move to standalone (only if currently in a project)
+  if (currentProjectId) {
+    const listsItem = document.createElement('div');
+    listsItem.className = 'lists-ctx-item';
+    listsItem.textContent = 'Lists';
+    listsItem.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      menu.remove();
+      hideDropdown();
+      await storage.moveListToProject(list.id, null);
+      undoManager.push({ type: 'update', entityType: 'list', id: list.id, before: { projectId: currentProjectId }, after: { projectId: null } });
+      list.projectId = null;
+      onListSelect(list.id);
+    });
+    menu.appendChild(listsItem);
+
+    if (projects.length > 0) {
+      const sep = document.createElement('div');
+      sep.className = 'lists-ctx-sep';
+      menu.appendChild(sep);
+    }
+  }
 
   for (const project of projects) {
+    // Skip the project the list is already in
+    if (project.id === currentProjectId) continue;
+
     const item = document.createElement('div');
     item.className = 'lists-ctx-item';
     item.textContent = project.name;
     item.addEventListener('click', async (ev) => {
       ev.stopPropagation();
       menu.remove();
-      const oldProjectId = list.projectId || null;
+      hideDropdown();
       await storage.moveListToProject(list.id, project.id);
-      undoManager.push({ type: 'update', entityType: 'list', id: list.id, before: { projectId: oldProjectId }, after: { projectId: project.id } });
-      await showDropdown();
+      undoManager.push({ type: 'update', entityType: 'list', id: list.id, before: { projectId: currentProjectId }, after: { projectId: project.id } });
+      list.projectId = project.id;
+      onMoveToProject(project.id, list.id);
     });
     menu.appendChild(item);
   }
 
   // Separator
-  if (projects.length > 0) {
+  const visibleProjects = projects.filter(p => p.id !== currentProjectId);
+  if (visibleProjects.length > 0 || currentProjectId) {
     const sep = document.createElement('div');
     sep.className = 'lists-ctx-sep';
     menu.appendChild(sep);
@@ -242,11 +273,11 @@ async function showMoveToProjectMenu(e, list) {
       for (const l of projectLists) {
         undoManager.push({ type: 'create', entityType: 'list', id: l.id, data: { ...l } });
       }
-      const oldProjectId = list.projectId || null;
       await storage.moveListToProject(list.id, project.id);
-      undoManager.push({ type: 'update', entityType: 'list', id: list.id, before: { projectId: oldProjectId }, after: { projectId: project.id } });
+      undoManager.push({ type: 'update', entityType: 'list', id: list.id, before: { projectId: currentProjectId }, after: { projectId: project.id } });
       undoManager.endBatch();
-      await showDropdown();
+      list.projectId = project.id;
+      onMoveToProject(project.id, list.id);
     }
   });
   menu.appendChild(newProjItem);
@@ -335,66 +366,73 @@ export async function showStandaloneListHeader(listId, autoFocusTitle) {
   listNav.innerHTML = '';
 
   if (authState.isLoggedIn) {
-    const shareBtn = document.createElement('button');
-    shareBtn.className = 'btn-share-list';
-    shareBtn.textContent = '\uD83D\uDD17';
-    shareBtn.title = 'Share this list';
-    shareBtn.addEventListener('click', async () => {
-      const shareCode = await storage.shareList(
-        listId,
-        null,
-        list.name,
-        list.name
-      );
-      // Reuse share popup from projectNav
-      showSharePopup(shareBtn, shareCode);
+    const listData = await storage.getList(listId);
+
+    // Read-only share button
+    const readShareBtn = document.createElement('button');
+    readShareBtn.className = 'btn-share-list';
+    readShareBtn.textContent = '\uD83D\uDD17';
+    readShareBtn.title = 'Share read-only link';
+    if (listData && listData.readShareCode) readShareBtn.classList.add('btn-share-list--read-active');
+
+    readShareBtn.addEventListener('click', async () => {
+      const ld = await storage.getList(listId);
+      if (ld && ld.readShareCode) {
+        showSharePopup(readShareBtn, ld.readShareCode);
+        return;
+      }
+      const shareCode = await storage.shareList(listId, null, list.name, list.name);
+      readShareBtn.classList.add('btn-share-list--read-active');
+      showSharePopup(readShareBtn, shareCode);
     });
 
-    // Middle-click: toggle write share
-    shareBtn.addEventListener('auxclick', async (e) => {
+    readShareBtn.addEventListener('auxclick', async (e) => {
       if (e.button !== 1) return;
       e.preventDefault();
-
-      const listData = await storage.getList(listId);
-
-      if (listData && listData.writeShareCode) {
-        // Revoke existing write share
-        await storage.revokeWriteShare(listId);
-        await storage.updateList(listId, { writeShareCode: null });
-        shareBtn.classList.remove('btn-share-list--write-active');
-        shareBtn.title = 'Write share revoked';
-        const origText = shareBtn.textContent;
-        shareBtn.textContent = '\u2717';
-        setTimeout(() => { shareBtn.textContent = origText; shareBtn.title = 'Share this list'; }, 1500);
-      } else {
-        // Generate new write share
-        const shareCode = await storage.shareListForWrite(
-          listId,
-          null,
-          list.name,
-          list.name
-        );
-        await storage.updateList(listId, { writeShareCode: shareCode });
-        shareBtn.classList.add('btn-share-list--write-active');
-
-        const baseUrl = window.location.origin || 'https://stupidlist.app';
-        const url = `${baseUrl}/s/${shareCode}`;
-        await navigator.clipboard.writeText(url);
-
-        shareBtn.title = 'Write link copied!';
-        const origText = shareBtn.textContent;
-        shareBtn.textContent = '\u2713';
-        setTimeout(() => { shareBtn.textContent = origText; shareBtn.title = 'Share this list'; }, 1500);
-      }
+      const ld = await storage.getList(listId);
+      if (!ld || !ld.readShareCode) return;
+      await storage.revokeReadShare(listId, ld.readShareCode);
+      readShareBtn.classList.remove('btn-share-list--read-active');
+      readShareBtn.title = 'Read share revoked';
+      const orig = readShareBtn.textContent;
+      readShareBtn.textContent = '\u2717';
+      setTimeout(() => { readShareBtn.textContent = orig; readShareBtn.title = 'Share read-only link'; }, 1500);
     });
 
-    // Show active write-share indicator
-    const listData = await storage.getList(listId);
-    if (listData && listData.writeShareCode) {
-      shareBtn.classList.add('btn-share-list--write-active');
-    }
+    listNav.appendChild(readShareBtn);
 
-    listNav.appendChild(shareBtn);
+    // Write share button
+    const writeShareBtn = document.createElement('button');
+    writeShareBtn.className = 'btn-share-list';
+    writeShareBtn.textContent = '\u270F\uFE0F';
+    writeShareBtn.title = 'Share editable link';
+    if (listData && listData.writeShareCode) writeShareBtn.classList.add('btn-share-list--write-active');
+
+    writeShareBtn.addEventListener('click', async () => {
+      const ld = await storage.getList(listId);
+      if (ld && ld.writeShareCode) {
+        showSharePopup(writeShareBtn, ld.writeShareCode);
+        return;
+      }
+      const shareCode = await storage.shareListForWrite(listId, null, list.name, list.name);
+      writeShareBtn.classList.add('btn-share-list--write-active');
+      showSharePopup(writeShareBtn, shareCode);
+    });
+
+    writeShareBtn.addEventListener('auxclick', async (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      const ld = await storage.getList(listId);
+      if (!ld || !ld.writeShareCode) return;
+      await storage.revokeWriteShare(listId);
+      writeShareBtn.classList.remove('btn-share-list--write-active');
+      writeShareBtn.title = 'Write share revoked';
+      const orig = writeShareBtn.textContent;
+      writeShareBtn.textContent = '\u2717';
+      setTimeout(() => { writeShareBtn.textContent = orig; writeShareBtn.title = 'Share editable link'; }, 1500);
+    });
+
+    listNav.appendChild(writeShareBtn);
   }
 
   // Auto-focus title for new lists
@@ -407,7 +445,7 @@ function showSharePopup(anchor, shareCode) {
   const old = document.querySelector('.share-popup');
   if (old) old.remove();
 
-  const baseUrl = window.location.origin || 'https://stupidlist.app';
+  const baseUrl = (window.location.origin && window.location.origin !== 'file://') ? window.location.origin : 'https://stupidlist.app';
   const url = `${baseUrl}/s/${shareCode}`;
 
   navigator.clipboard.writeText(url);

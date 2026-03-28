@@ -358,8 +358,8 @@ export async function moveListToProject(listId, projectId) {
   const list = await promisify(store.get(listId));
   if (!list) return null;
 
-  const targetLists = await getListsForProject(projectId);
-  Object.assign(list, { projectId, order: targetLists.length, updatedAt: Date.now() });
+  const targetLists = projectId ? await getListsForProject(projectId) : await getStandaloneLists();
+  Object.assign(list, { projectId: projectId || null, order: targetLists.length, updatedAt: Date.now() });
   await promisify(store.put(list));
   return list;
 }

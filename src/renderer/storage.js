@@ -168,6 +168,7 @@ export async function moveItemFromListToDay(iid, d) {
 export function shareList(lid, pid, pn, ln) { return cloud.shareList(lid, pid, pn, ln); }
 export function shareListForWrite(lid, pid, pn, ln) { return cloud.shareListForWrite(lid, pid, pn, ln); }
 export function revokeWriteShare(lid) { return cloud.revokeWriteShare(lid); }
+export function revokeReadShare(lid, code) { return cloud.revokeReadShare(lid, code); }
 export function getSharedList(code) { return cloud.getSharedList(code); }
 export function getSharedListItems(uid, lid) { return cloud.getSharedListItems(uid, lid); }
 export function sharedAddItemToList(uid, lid, t) { return cloud.sharedAddItemToList(uid, lid, t); }

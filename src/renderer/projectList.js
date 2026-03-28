@@ -111,12 +111,36 @@ function createItemElement(itemData, isParent = false) {
 }
 
 async function handleConvertToSpacer(id, li) {
+  const list = document.getElementById('item-list');
   const before = sharedCtx ? null : await storage.getItem(id);
+
+  if (!sharedCtx) undoManager.startBatch('insert spacer');
+
+  // Convert current empty item to spacer
   await stg().updateItem(id, { isSpacer: true });
   if (before) {
     undoManager.push({ type: 'update', entityType: 'item', id, before: { isSpacer: before.isSpacer || false }, after: { isSpacer: true } });
   }
-  await render(currentListId, sharedCtx);
+
+  // Replace DOM element with spacer version
+  const spacerData = before ? { ...before, isSpacer: true } : { id, isSpacer: true };
+  const spacerLi = createItemElement(spacerData, false);
+  li.replaceWith(spacerLi);
+
+  // Create new empty item below the spacer
+  const newItemData = await stg().addItemToList(currentListId, '');
+  if (!sharedCtx) undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
+  const newLi = createItemElement(newItemData, false);
+  if (spacerLi.nextSibling) {
+    list.insertBefore(newLi, spacerLi.nextSibling);
+  } else {
+    list.appendChild(newLi);
+  }
+
+  if (!sharedCtx) undoManager.endBatch();
+  renumber();
+  saveOrder();
+  setTimeout(() => item.focusText(newLi), 0);
 }
 
 async function handleToggleDone(id, li) {
@@ -276,14 +300,14 @@ async function handleUnindent(id, li) {
 
 function handleFocusPrev(currentLi) {
   let prev = currentLi.previousElementSibling;
-  while (prev && prev.classList.contains('item--spacer')) prev = prev.previousElementSibling;
+  while (prev && !prev.querySelector('.item-text')) prev = prev.previousElementSibling;
   if (prev) item.focusText(prev);
 }
 
 function handleFocusNext(currentLi) {
   let next = currentLi.nextElementSibling;
-  while (next && next.classList.contains('item--spacer')) next = next.nextElementSibling;
-  if (next) item.focusText(next);
+  while (next && !next.querySelector('.item-text')) next = next.nextElementSibling;
+  if (next) item.focusText(next, true);
 }
 
 async function handlePasteMultiple(afterId, lines) {
@@ -347,6 +371,10 @@ function renumber() {
   items.forEach((li) => {
     const num = li.querySelector('.item-number');
     if (!num) return;
+    if (li.classList.contains('item--restart') && !li.classList.contains('item--child')) {
+      topNum = 0;
+      childNum = 0;
+    }
     if (li.classList.contains('item--child')) {
       childNum++;
       num.textContent = `${topNum}.${childNum}`;

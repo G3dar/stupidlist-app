@@ -2,7 +2,7 @@ import { firestore } from '../shared/firebase-config.js';
 import { getUid } from './auth.js';
 import { generateId, migrateState } from '../shared/constants.js';
 import {
-  collection, doc, setDoc, getDoc, getDocs, updateDoc,
+  collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
   query, where, orderBy, writeBatch, onSnapshot, increment, arrayUnion
 } from 'firebase/firestore';
 
@@ -237,8 +237,8 @@ export async function moveListToProject(listId, projectId) {
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
 
-  const targetLists = await getListsForProject(projectId);
-  const updated = { projectId, order: targetLists.length, updatedAt: Date.now() };
+  const targetLists = projectId ? await getListsForProject(projectId) : await getStandaloneLists();
+  const updated = { projectId: projectId || null, order: targetLists.length, updatedAt: Date.now() };
   await updateDoc(ref, updated);
   return { ...snap.data(), ...updated };
 }
@@ -352,6 +352,7 @@ export async function shareList(listId, projectId, projectName, listName) {
     listName,
     createdAt: Date.now()
   });
+  await updateDoc(userDoc('lists', listId), { readShareCode: shareCode, updatedAt: Date.now() });
   return shareCode;
 }
 
@@ -374,6 +375,11 @@ export async function shareListForWrite(listId, projectId, projectName, listName
 
 export async function revokeWriteShare(listId) {
   await updateDoc(userDoc('lists', listId), { writeShareCode: null, updatedAt: Date.now() });
+}
+
+export async function revokeReadShare(listId, shareCode) {
+  await deleteDoc(doc(firestore, 'shares', shareCode));
+  await updateDoc(userDoc('lists', listId), { readShareCode: null, updatedAt: Date.now() });
 }
 
 export async function getSharedList(shareCode) {

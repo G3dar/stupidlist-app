@@ -1084,6 +1084,10 @@ header {
   background: var(--border);
 }
 
+.item--restart {
+  border-top: 1px solid var(--border);
+}
+
 .item.dragging {
   opacity: 0.3;
 }
@@ -1170,6 +1174,7 @@ header {
   color: var(--text);
 }
 
+.btn-share-list--read-active,
 .btn-share-list--write-active {
   border-color: #4285f4;
   color: #4285f4;
