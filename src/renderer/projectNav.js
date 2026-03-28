@@ -1,6 +1,7 @@
 import * as storage from './storage.js';
 import { authState } from './auth.js';
 import * as undoManager from './undoManager.js';
+import { showDeleteConfirm } from './deleteConfirm.js';
 
 let onProjectSelect = null;
 let onListSelect = null;
@@ -99,24 +100,26 @@ async function showDropdown() {
     });
 
     // Right-click to delete
-    row.addEventListener('contextmenu', async (e) => {
+    row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (confirm(`Delete project "${project.name}"?`)) {
-        // Snapshot for undo before cascade delete
-        undoManager.startBatch('delete project');
-        const listsToDelete = await storage.getListsForProject(project.id);
-        for (const list of listsToDelete) {
-          const listItems = await storage.getItemsForList(list.id);
-          for (const item of listItems) {
-            undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
-          }
-          undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
-        }
-        undoManager.push({ type: 'delete', entityType: 'project', id: project.id, data: { ...project } });
-        undoManager.endBatch();
-        await storage.deleteProject(project.id);
-        await showDropdown();
-      }
+      showDeleteConfirm({
+        name: project.name,
+        type: 'project',
+        containedLists: lists.map(l => ({ name: l.name })),
+        onConfirm: () => performDeleteProject(project)
+      });
+    });
+
+    // Middle-click to delete
+    row.addEventListener('mousedown', (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      showDeleteConfirm({
+        name: project.name,
+        type: 'project',
+        containedLists: lists.map(l => ({ name: l.name })),
+        onConfirm: () => performDeleteProject(project)
+      });
     });
 
     dd.appendChild(row);
@@ -144,6 +147,22 @@ async function showDropdown() {
     }
   });
   dd.appendChild(input);
+}
+
+async function performDeleteProject(project) {
+  undoManager.startBatch('delete project');
+  const listsToDelete = await storage.getListsForProject(project.id);
+  for (const list of listsToDelete) {
+    const listItems = await storage.getItemsForList(list.id);
+    for (const item of listItems) {
+      undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
+    }
+    undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
+  }
+  undoManager.push({ type: 'delete', entityType: 'project', id: project.id, data: { ...project } });
+  undoManager.endBatch();
+  await storage.deleteProject(project.id);
+  await showDropdown();
 }
 
 export async function showProjectHeader(projectId, activeListId) {
@@ -274,25 +293,28 @@ async function renderListTabs(projectId, activeListId) {
     });
 
     // Right-click to delete
-    tab.addEventListener('contextmenu', async (e) => {
+    tab.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (lists.length <= 1) return; // Don't delete the last list
-      if (confirm(`Delete list "${list.name}"?`)) {
-        // Snapshot for undo
-        undoManager.startBatch('delete list');
-        const listItems = await storage.getItemsForList(list.id);
-        for (const item of listItems) {
-          undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
+      showDeleteConfirm({
+        name: list.name,
+        type: 'list',
+        onConfirm: async () => {
+          undoManager.startBatch('delete list');
+          const listItems = await storage.getItemsForList(list.id);
+          for (const item of listItems) {
+            undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
+          }
+          undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
+          undoManager.endBatch();
+          await storage.deleteList(list.id);
+          const remaining = await storage.getListsForProject(projectId);
+          if (remaining.length > 0) {
+            onListSelect(remaining[0].id);
+            await renderListTabs(projectId, remaining[0].id);
+          }
         }
-        undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
-        undoManager.endBatch();
-        await storage.deleteList(list.id);
-        const remaining = await storage.getListsForProject(projectId);
-        if (remaining.length > 0) {
-          onListSelect(remaining[0].id);
-          await renderListTabs(projectId, remaining[0].id);
-        }
-      }
+      });
     });
 
     listNav.appendChild(tab);

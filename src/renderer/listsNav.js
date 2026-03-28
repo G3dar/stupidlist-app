@@ -1,6 +1,7 @@
 import * as storage from './storage.js';
 import { authState } from './auth.js';
 import * as undoManager from './undoManager.js';
+import { showDeleteConfirm } from './deleteConfirm.js';
 
 let onNewList = null;
 let onListSelect = null;
@@ -113,8 +114,31 @@ async function showDropdown() {
       showListContextMenu(e, list);
     });
 
+    // Middle-click to delete
+    row.addEventListener('mousedown', (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      showDeleteConfirm({
+        name: list.name,
+        type: 'list',
+        onConfirm: () => performDeleteList(list)
+      });
+    });
+
     dd.appendChild(row);
   }
+}
+
+async function performDeleteList(list) {
+  undoManager.startBatch('delete list');
+  const listItems = await storage.getItemsForList(list.id);
+  for (const item of listItems) {
+    undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
+  }
+  undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
+  undoManager.endBatch();
+  await storage.deleteList(list.id);
+  await showDropdown();
 }
 
 function showListContextMenu(e, list) {
@@ -144,20 +168,14 @@ function showListContextMenu(e, list) {
   const deleteItem = document.createElement('div');
   deleteItem.className = 'lists-ctx-item lists-ctx-item--danger';
   deleteItem.textContent = 'Delete';
-  deleteItem.addEventListener('click', async (ev) => {
+  deleteItem.addEventListener('click', (ev) => {
     ev.stopPropagation();
     menu.remove();
-    if (confirm(`Delete list "${list.name}"?`)) {
-      undoManager.startBatch('delete list');
-      const listItems = await storage.getItemsForList(list.id);
-      for (const item of listItems) {
-        undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
-      }
-      undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
-      undoManager.endBatch();
-      await storage.deleteList(list.id);
-      await showDropdown();
-    }
+    showDeleteConfirm({
+      name: list.name,
+      type: 'list',
+      onConfirm: () => performDeleteList(list)
+    });
   });
   menu.appendChild(deleteItem);
 
