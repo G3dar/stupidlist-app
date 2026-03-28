@@ -1700,6 +1700,18 @@ header {
     padding: 2px 5px;
   }
 
+  .nav-new {
+    font-size: 0;
+    padding: 2px 6px;
+    line-height: 1;
+  }
+
+  .nav-new::before {
+    content: "+";
+    font-size: 14px;
+    font-weight: 700;
+  }
+
   .nav-projects {
     font-size: 9px;
     padding: 2px 6px;
