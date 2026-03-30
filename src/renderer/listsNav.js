@@ -371,7 +371,7 @@ export async function showStandaloneListHeader(listId, autoFocusTitle) {
     // Read-only share button
     const readShareBtn = document.createElement('button');
     readShareBtn.className = 'btn-share-list';
-    readShareBtn.textContent = '\uD83D\uDD17';
+    readShareBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
     readShareBtn.title = 'Share read-only link';
     if (listData && listData.readShareCode) readShareBtn.classList.add('btn-share-list--read-active');
 
@@ -394,9 +394,9 @@ export async function showStandaloneListHeader(listId, autoFocusTitle) {
       await storage.revokeReadShare(listId, ld.readShareCode);
       readShareBtn.classList.remove('btn-share-list--read-active');
       readShareBtn.title = 'Read share revoked';
-      const orig = readShareBtn.textContent;
+      const orig = readShareBtn.innerHTML;
       readShareBtn.textContent = '\u2717';
-      setTimeout(() => { readShareBtn.textContent = orig; readShareBtn.title = 'Share read-only link'; }, 1500);
+      setTimeout(() => { readShareBtn.innerHTML = orig; readShareBtn.title = 'Share read-only link'; }, 1500);
     });
 
     listNav.appendChild(readShareBtn);
@@ -404,7 +404,7 @@ export async function showStandaloneListHeader(listId, autoFocusTitle) {
     // Write share button
     const writeShareBtn = document.createElement('button');
     writeShareBtn.className = 'btn-share-list';
-    writeShareBtn.textContent = '\u270F\uFE0F';
+    writeShareBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M17.5 15.5l-2 2"/><path d="M19 14l2 2-5 5-2-2 5-5z"/></svg>';
     writeShareBtn.title = 'Share editable link';
     if (listData && listData.writeShareCode) writeShareBtn.classList.add('btn-share-list--write-active');
 
@@ -427,9 +427,9 @@ export async function showStandaloneListHeader(listId, autoFocusTitle) {
       await storage.revokeWriteShare(listId);
       writeShareBtn.classList.remove('btn-share-list--write-active');
       writeShareBtn.title = 'Write share revoked';
-      const orig = writeShareBtn.textContent;
+      const origHTML = writeShareBtn.innerHTML;
       writeShareBtn.textContent = '\u2717';
-      setTimeout(() => { writeShareBtn.textContent = orig; writeShareBtn.title = 'Share editable link'; }, 1500);
+      setTimeout(() => { writeShareBtn.innerHTML = origHTML; writeShareBtn.title = 'Share editable link'; }, 1500);
     });
 
     listNav.appendChild(writeShareBtn);

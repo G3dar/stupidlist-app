@@ -480,10 +480,11 @@ export async function showForItem(e, itemData, onRefresh, onDelete, listContext)
 
   const rect = menu.getBoundingClientRect();
   if (rect.right > window.innerWidth) {
-    menu.style.left = `${window.innerWidth - rect.width - 8}px`;
+    menu.style.left = `${Math.max(8, window.innerWidth - rect.width - 8)}px`;
   }
   if (rect.bottom > window.innerHeight) {
-    menu.style.top = `${window.innerHeight - rect.height - 8}px`;
+    const above = e.clientY - rect.height;
+    menu.style.top = above >= 0 ? `${above}px` : '8px';
   }
 
   activeMenu = menu;

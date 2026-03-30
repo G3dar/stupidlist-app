@@ -291,7 +291,13 @@ export function create(itemData, callbacks) {
 
     if (e.key === 'Backspace' && text.textContent.trim() === '') {
       e.preventDefault();
-      onDelete(itemData.id, li);
+      // If previous sibling is a spacer, delete the spacer instead
+      const prev = li.previousElementSibling;
+      if (prev && prev.classList.contains('item--spacer')) {
+        onDelete(prev.dataset.id, prev);
+      } else {
+        onDelete(itemData.id, li);
+      }
     }
 
     if (e.key === 'ArrowUp' && !e.shiftKey) {

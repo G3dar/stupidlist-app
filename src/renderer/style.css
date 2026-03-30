@@ -1163,10 +1163,15 @@ header {
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  padding: 2px 8px;
+  padding: 4px 6px;
   border-radius: 4px;
   margin-left: 4px;
   transition: background 0.1s, color 0.1s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
 }
 
 .btn-share-list:hover {
@@ -1174,10 +1179,18 @@ header {
   color: var(--text);
 }
 
-.btn-share-list--read-active,
-.btn-share-list--write-active {
+.btn-share-list--read-active {
   border-color: #4285f4;
   color: #4285f4;
+}
+
+.btn-share-list--write-active {
+  border-color: #34a853;
+  color: #34a853;
+}
+
+.btn-share-list svg {
+  flex-shrink: 0;
 }
 
 .share-popup {
@@ -1845,7 +1858,7 @@ header {
     font-size: 14px;
   }
 
-  .nav-projects {
+  .nav-projects, .nav-lists {
     font-size: 9px;
     padding: 2px 6px;
   }

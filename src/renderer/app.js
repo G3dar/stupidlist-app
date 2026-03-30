@@ -103,7 +103,20 @@ export async function init() {
   setupNavigation();
   setupPasteAsItems();
   setupFlushSaves();
-  await loadDay(currentDateKey);
+
+  // Mouse back button → go back to day view
+  document.addEventListener('mouseup', (e) => {
+    if (e.button === 3 && (currentView === 'standalone' || currentView === 'project')) {
+      e.preventDefault();
+      switchToDay();
+    }
+  });
+
+  // Restore view from URL hash
+  const restored = await restoreFromHash();
+  if (!restored) {
+    await loadDay(currentDateKey);
+  }
 }
 
 async function loadDay(dateKey) {
@@ -119,6 +132,7 @@ async function loadDay(dateKey) {
     currentDateKey = dateKey;
     currentProjectId = null;
     currentListId = null;
+    updateHash();
     updateDateDisplay();
     await dayList.render(dateKey);
 
@@ -152,6 +166,7 @@ async function loadProject(projectId, listId) {
   }
 
   currentListId = listId;
+  updateHash();
 
   // Hide carry-over in project mode
   document.getElementById('carry-over').innerHTML = '';
@@ -170,6 +185,7 @@ async function loadProject(projectId, listId) {
 
 async function loadList(listId) {
   currentListId = listId;
+  updateHash();
   await projectList.render(listId);
 
   storage.subscribe('list', listId, () => {
@@ -181,6 +197,7 @@ async function loadStandaloneList(listId, autoFocusTitle) {
   currentView = 'standalone';
   currentListId = listId;
   currentProjectId = null;
+  updateHash();
 
   // Hide carry-over in standalone mode
   document.getElementById('carry-over').innerHTML = '';
@@ -362,6 +379,43 @@ async function exportData() {
   a.download = `stupidlist-export-${toDateKey(new Date())}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function updateHash() {
+  if (currentView === 'project' && currentProjectId && currentListId) {
+    history.replaceState(null, '', '#project/' + currentProjectId + '/' + currentListId);
+  } else if (currentView === 'standalone' && currentListId) {
+    history.replaceState(null, '', '#list/' + currentListId);
+  } else {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+}
+
+async function restoreFromHash() {
+  const hash = window.location.hash;
+  const listMatch = hash.match(/^#list\/(.+)$/);
+  if (listMatch) {
+    const listId = listMatch[1];
+    // Verify the list exists
+    const list = await storage.getList(listId);
+    if (list) {
+      await loadStandaloneList(listId);
+      return true;
+    }
+    return false;
+  }
+  const projMatch = hash.match(/^#project\/([^/]+)\/(.+)$/);
+  if (projMatch) {
+    const projectId = projMatch[1];
+    const listId = projMatch[2];
+    const list = await storage.getList(listId);
+    if (list) {
+      await loadProject(projectId, listId);
+      return true;
+    }
+    return false;
+  }
+  return false;
 }
 
 function isStatsPage() {
