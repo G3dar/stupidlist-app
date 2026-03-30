@@ -9,6 +9,28 @@ let onMoveList = null;
 let onBack = null;
 let dropdownVisible = false;
 
+function addLongPress(element, callback) {
+  let timer = null;
+  let startX = 0;
+  let startY = 0;
+  element.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    timer = setTimeout(() => {
+      element._longPressed = true;
+      if (navigator.vibrate) navigator.vibrate(50);
+      callback(touch.clientX, touch.clientY);
+    }, 500);
+  }, { passive: true });
+  element.addEventListener('touchmove', (e) => {
+    const touch = e.touches[0];
+    if (Math.sqrt((touch.clientX - startX) ** 2 + (touch.clientY - startY) ** 2) > 10) clearTimeout(timer);
+  }, { passive: true });
+  element.addEventListener('touchend', () => clearTimeout(timer));
+  element.addEventListener('touchcancel', () => clearTimeout(timer));
+}
+
 function timeAgo(ts) {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60000);
@@ -97,6 +119,7 @@ async function showDropdown() {
     row.appendChild(updated);
 
     row.addEventListener('click', () => {
+      if (row._longPressed) { row._longPressed = false; return; }
       hideDropdown();
       onProjectSelect(project.id, lists.length > 0 ? lists[0].id : null);
     });
@@ -104,6 +127,16 @@ async function showDropdown() {
     // Right-click to delete
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      showDeleteConfirm({
+        name: project.name,
+        type: 'project',
+        containedLists: lists.map(l => ({ name: l.name })),
+        onConfirm: () => performDeleteProject(project)
+      });
+    });
+
+    // Long-press to show delete confirm (mobile)
+    addLongPress(row, (cx, cy) => {
       showDeleteConfirm({
         name: project.name,
         type: 'project',
@@ -405,6 +438,7 @@ async function renderListTabs(projectId, activeListId) {
     tab.textContent = list.name;
 
     tab.addEventListener('click', () => {
+      if (tab._longPressed) { tab._longPressed = false; return; }
       if (tab.classList.contains('active')) {
         // Already active — rename
         startRenameTab(tab, list);
@@ -414,6 +448,12 @@ async function renderListTabs(projectId, activeListId) {
         listNav.querySelectorAll('.list-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
       }
+    });
+
+    // Long-press context menu (mobile)
+    addLongPress(tab, (cx, cy) => {
+      const fakeEvent = { preventDefault() {}, stopPropagation() {}, clientX: cx, clientY: cy, target: tab };
+      showListTabContextMenu(fakeEvent, list, projectId, lists);
     });
 
     // Middle-click to delete

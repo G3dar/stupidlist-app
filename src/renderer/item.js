@@ -49,6 +49,7 @@ export function create(itemData, callbacks) {
     let longPressed = false;
     let dragging = false;
     let dropTarget = null;
+    let swiping = false;
 
     li.addEventListener('touchstart', (e) => {
       if (e.target.closest('.item-status') || e.target.closest('.item-done')) return;
@@ -58,6 +59,7 @@ export function create(itemData, callbacks) {
       longPressed = false;
       dragging = false;
       dropTarget = null;
+      swiping = false;
 
       touchTimer = setTimeout(() => {
         longPressed = true;
@@ -72,8 +74,35 @@ export function create(itemData, callbacks) {
       const dy = touch.clientY - touchStartY;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
+      // Already swiping — update position
+      if (swiping) {
+        e.preventDefault();
+        li.style.transform = `translateX(${dx}px)`;
+        if (dx < -30) {
+          li.classList.add('item--swiping-left');
+          li.classList.remove('item--swiping-right');
+        } else if (dx > 30) {
+          li.classList.add('item--swiping-right');
+          li.classList.remove('item--swiping-left');
+        } else {
+          li.classList.remove('item--swiping-left', 'item--swiping-right');
+        }
+        return;
+      }
+
       if (!longPressed) {
-        if (dist > 10) clearTimeout(touchTimer);
+        if (dist > 10) {
+          clearTimeout(touchTimer);
+          // Determine if horizontal swipe or vertical scroll
+          if (Math.abs(dx) > Math.abs(dy)) {
+            // Skip swipe if editing text in this item
+            const active = document.activeElement;
+            if (active && active.classList.contains('item-text') && li.contains(active)) return;
+            swiping = true;
+            e.preventDefault();
+          }
+          // If vertical dominant, do nothing — let browser scroll
+        }
         return;
       }
 
@@ -103,6 +132,35 @@ export function create(itemData, callbacks) {
       clearTimeout(touchTimer);
       li.classList.remove('touch-active');
 
+      if (swiping) {
+        const touch = e.changedTouches[0];
+        const dx = touch.clientX - touchStartX;
+        const threshold = li.offsetWidth * 0.3;
+
+        li.classList.remove('item--swiping-left', 'item--swiping-right');
+
+        if (dx < -threshold && !itemData.done) {
+          // Swipe left → mark done
+          li.classList.add('item--swipe-done');
+          setTimeout(() => onToggleDone(itemData.id, li), 250);
+        } else if (dx > threshold && (!listContext || !listContext.isSharedView)) {
+          // Swipe right → snooze to tomorrow
+          li.classList.add('item--swipe-snooze');
+          setTimeout(() => contextMenu.snoozeToTomorrow(itemData, onRefresh || (() => {})), 250);
+        } else {
+          // Below threshold → snap back
+          li.style.transition = 'transform 0.2s ease-out';
+          li.style.transform = '';
+          li.addEventListener('transitionend', function handler() {
+            li.style.transition = '';
+            li.removeEventListener('transitionend', handler);
+          }, { once: true });
+        }
+
+        swiping = false;
+        return;
+      }
+
       if (dragging) {
         li.classList.remove('dragging');
         document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
@@ -129,10 +187,13 @@ export function create(itemData, callbacks) {
 
     li.addEventListener('touchcancel', () => {
       clearTimeout(touchTimer);
-      li.classList.remove('touch-active', 'dragging');
+      li.classList.remove('touch-active', 'dragging', 'item--swiping-left', 'item--swiping-right');
+      li.style.transform = '';
+      li.style.transition = '';
       document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
       longPressed = false;
       dragging = false;
+      swiping = false;
     });
   }
 

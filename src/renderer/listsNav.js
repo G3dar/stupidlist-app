@@ -9,6 +9,28 @@ let onMoveToProject = null;
 let onBack = null;
 let dropdownVisible = false;
 
+function addLongPress(element, callback) {
+  let timer = null;
+  let startX = 0;
+  let startY = 0;
+  element.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    timer = setTimeout(() => {
+      element._longPressed = true;
+      if (navigator.vibrate) navigator.vibrate(50);
+      callback(touch.clientX, touch.clientY);
+    }, 500);
+  }, { passive: true });
+  element.addEventListener('touchmove', (e) => {
+    const touch = e.touches[0];
+    if (Math.sqrt((touch.clientX - startX) ** 2 + (touch.clientY - startY) ** 2) > 10) clearTimeout(timer);
+  }, { passive: true });
+  element.addEventListener('touchend', () => clearTimeout(timer));
+  element.addEventListener('touchcancel', () => clearTimeout(timer));
+}
+
 function timeAgo(ts) {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60000);
@@ -106,6 +128,7 @@ async function showDropdown() {
     row.appendChild(updated);
 
     row.addEventListener('click', () => {
+      if (row._longPressed) { row._longPressed = false; return; }
       hideDropdown();
       onListSelect(list.id);
     });
@@ -114,6 +137,12 @@ async function showDropdown() {
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       showListContextMenu(e, list);
+    });
+
+    // Long-press context menu (mobile)
+    addLongPress(row, (cx, cy) => {
+      const fakeEvent = { preventDefault() {}, stopPropagation() {}, clientX: cx, clientY: cy, target: row };
+      showListContextMenu(fakeEvent, list);
     });
 
     // Middle-click to delete
@@ -350,12 +379,21 @@ export async function showStandaloneListHeader(listId, autoFocusTitle) {
     });
   };
 
-  nameSpan.addEventListener('click', startRename);
+  nameSpan.addEventListener('click', () => {
+    if (nameSpan._longPressed) { nameSpan._longPressed = false; return; }
+    startRename();
+  });
 
   // Right-click on name for "Move to project"
   nameSpan.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     showMoveToProjectMenu(e, list);
+  });
+
+  // Long-press on name for "Move to project" (mobile)
+  addLongPress(nameSpan, (cx, cy) => {
+    const fakeEvent = { preventDefault() {}, stopPropagation() {}, clientX: cx, clientY: cy, target: nameSpan };
+    showMoveToProjectMenu(fakeEvent, list);
   });
 
   logo.appendChild(backBtn);

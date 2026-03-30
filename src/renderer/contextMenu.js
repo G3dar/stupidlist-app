@@ -8,6 +8,33 @@ import * as undoManager from './undoManager.js';
 let activeMenu = null;
 let savedSelection = null;
 
+// Exported helpers for snooze (reused by swipe gesture in item.js)
+export async function snoozeToDate(itemData, dateKey, onRefresh) {
+  const originalSnapshot = await storage.getItem(itemData.id);
+  let newItem;
+  if (itemData.listId) {
+    newItem = await storage.moveItemFromListToDay(itemData.id, dateKey);
+  } else {
+    newItem = await storage.moveItemToDay(itemData.id, dateKey);
+  }
+  if (originalSnapshot && newItem) {
+    undoManager.startBatch('snooze');
+    if (itemData.listId) {
+      undoManager.push({ type: 'delete', entityType: 'item', id: itemData.id, data: { ...originalSnapshot } });
+    } else {
+      undoManager.push({ type: 'update', entityType: 'item', id: itemData.id, before: { done: originalSnapshot.done }, after: { done: true } });
+    }
+    undoManager.push({ type: 'create', entityType: 'item', id: newItem.id, data: { ...newItem } });
+    undoManager.endBatch();
+  }
+  onRefresh();
+}
+
+export function snoozeToTomorrow(itemData, onRefresh) {
+  const tomorrowKey = addDays(toDateKey(new Date()), 1);
+  return snoozeToDate(itemData, tomorrowKey, onRefresh);
+}
+
 function close() {
   if (activeMenu) {
     activeMenu.remove();
@@ -377,27 +404,10 @@ export async function showForItem(e, itemData, onRefresh, onDelete, listContext)
       const optItem = document.createElement('div');
       optItem.className = 'ctx-menu-item';
       optItem.innerHTML = `<span>${opt.label}</span><span class="ctx-snooze-date">${formatDateLabel(opt.dateKey)}</span>`;
-      optItem.addEventListener('click', async (ev) => {
+      optItem.addEventListener('click', (ev) => {
         ev.stopPropagation();
         close();
-        const originalSnapshot = await storage.getItem(itemData.id);
-        let newItem;
-        if (itemData.listId) {
-          newItem = await storage.moveItemFromListToDay(itemData.id, opt.dateKey);
-        } else {
-          newItem = await storage.moveItemToDay(itemData.id, opt.dateKey);
-        }
-        if (originalSnapshot && newItem) {
-          undoManager.startBatch('snooze');
-          if (itemData.listId) {
-            undoManager.push({ type: 'delete', entityType: 'item', id: itemData.id, data: { ...originalSnapshot } });
-          } else {
-            undoManager.push({ type: 'update', entityType: 'item', id: itemData.id, before: { done: originalSnapshot.done }, after: { done: true } });
-          }
-          undoManager.push({ type: 'create', entityType: 'item', id: newItem.id, data: { ...newItem } });
-          undoManager.endBatch();
-        }
-        onRefresh();
+        snoozeToDate(itemData, opt.dateKey, onRefresh);
       });
       snoozeSubmenu.appendChild(optItem);
     }
@@ -411,25 +421,8 @@ export async function showForItem(e, itemData, onRefresh, onDelete, listContext)
       const menuX = parseInt(activeMenu.style.left);
       const menuY = parseInt(activeMenu.style.top);
       close();
-      showDatePicker(menuX, menuY, async (dateKey) => {
-        const originalSnapshot = await storage.getItem(itemData.id);
-        let newItem;
-        if (itemData.listId) {
-          newItem = await storage.moveItemFromListToDay(itemData.id, dateKey);
-        } else {
-          newItem = await storage.moveItemToDay(itemData.id, dateKey);
-        }
-        if (originalSnapshot && newItem) {
-          undoManager.startBatch('snooze to date');
-          if (itemData.listId) {
-            undoManager.push({ type: 'delete', entityType: 'item', id: itemData.id, data: { ...originalSnapshot } });
-          } else {
-            undoManager.push({ type: 'update', entityType: 'item', id: itemData.id, before: { done: originalSnapshot.done }, after: { done: true } });
-          }
-          undoManager.push({ type: 'create', entityType: 'item', id: newItem.id, data: { ...newItem } });
-          undoManager.endBatch();
-        }
-        onRefresh();
+      showDatePicker(menuX, menuY, (dateKey) => {
+        snoozeToDate(itemData, dateKey, onRefresh);
       });
     });
     snoozeSubmenu.appendChild(chooseDateItem);

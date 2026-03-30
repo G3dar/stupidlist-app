@@ -1776,6 +1776,47 @@ header {
   background: var(--accent-light);
 }
 
+/* ─── Swipe gesture states ─── */
+.item--swiping-left {
+  background: linear-gradient(to left, #dcfce7 0%, transparent 60%);
+}
+
+.item--swiping-right {
+  background: linear-gradient(to right, #fef3c7 0%, transparent 60%);
+}
+
+.item--swipe-done {
+  overflow: hidden;
+  animation: swipe-off-left 0.25s ease-out forwards;
+}
+
+.item--swipe-snooze {
+  overflow: hidden;
+  animation: swipe-off-right 0.25s ease-out forwards;
+}
+
+@keyframes swipe-off-left {
+  to {
+    transform: translateX(-100%);
+    opacity: 0;
+    max-height: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+  }
+}
+
+@keyframes swipe-off-right {
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+    max-height: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+  }
+}
+
 /* Context menu delete item */
 .ctx-menu-item--danger {
   color: #dc2626;
