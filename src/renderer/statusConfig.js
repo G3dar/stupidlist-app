@@ -5,8 +5,57 @@ const DEFAULT_STATUSES = [
   { id: 'not_started', label: 'Not Started', icon: '○', color: null },
   { id: 'in_progress', label: 'In Progress', icon: '▶', color: '#f59e0b' },
   { id: 'waiting', label: 'Waiting', icon: '⏳', color: '#999' },
-  { id: 'tbd', label: 'TBD', icon: '◇', color: '#8b5cf6' },
+  { id: 'ready_to_test', label: 'Ready to Test', icon: '🧪', color: '#06b6d4' },
+  { id: 'tbc', label: 'TBC', icon: '◇', color: '#8b5cf6' },
 ];
+
+// One-time migration: tbd → tbc, add ready_to_test
+export async function migrateStatuses() {
+  if (localStorage.getItem('statusMigration_tbd_tbc')) return;
+
+  // Migrate localStorage status configs
+  const keys = Object.keys(localStorage);
+  for (const key of keys) {
+    if (key === 'defaultStatuses' || key === 'dayStatuses' || key.startsWith('listStatuses_')) {
+      try {
+        const arr = JSON.parse(localStorage.getItem(key));
+        if (!Array.isArray(arr)) continue;
+        let changed = false;
+        // Rename tbd → tbc
+        for (const s of arr) {
+          if (s.id === 'tbd') {
+            s.id = 'tbc';
+            s.label = 'TBC';
+            changed = true;
+          }
+        }
+        // Add ready_to_test before tbc if missing
+        if (!arr.some(s => s.id === 'ready_to_test')) {
+          const tbcIdx = arr.findIndex(s => s.id === 'tbc');
+          const rtt = { id: 'ready_to_test', label: 'Ready to Test', icon: '🧪', color: '#06b6d4' };
+          if (tbcIdx >= 0) arr.splice(tbcIdx, 0, rtt);
+          else arr.push(rtt);
+          changed = true;
+        }
+        if (changed) localStorage.setItem(key, JSON.stringify(arr));
+      } catch {}
+    }
+  }
+
+  // Migrate items in IndexedDB: status 'tbd' → 'tbc'
+  try {
+    const all = await storage.exportAll();
+    for (const item of all.items) {
+      if (item.status === 'tbd') {
+        await storage.updateItem(item.id, { status: 'tbc' });
+      }
+    }
+  } catch (e) {
+    console.warn('Status migration (items):', e);
+  }
+
+  localStorage.setItem('statusMigration_tbd_tbc', '1');
+}
 
 // Get global defaults (from localStorage or hardcoded)
 export function getGlobalDefaults() {

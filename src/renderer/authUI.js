@@ -25,13 +25,23 @@ export function init(reloadCallback) {
       try {
         await Promise.race([
           pullFromCloud(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud sync timeout')), 8000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud sync timeout')), 15000))
         ]);
       } catch (err) {
         console.warn('Cloud sync skipped:', err.message);
       }
     }
     if (onReload) onReload();
+  });
+
+  // Re-pull from cloud when app returns to foreground
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      try {
+        await pullFromCloud();
+      } catch {}
+      if (onReload) onReload();
+    }
   });
 
   // Render initial state (logged out)

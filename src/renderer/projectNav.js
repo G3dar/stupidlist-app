@@ -416,6 +416,32 @@ async function renderListTabs(projectId, activeListId) {
       }
     });
 
+    // Middle-click to delete
+    tab.addEventListener('mousedown', (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      if (lists.length <= 1) return;
+      showDeleteConfirm({
+        name: list.name,
+        type: 'list',
+        onConfirm: async () => {
+          undoManager.startBatch('delete list');
+          const listItems = await storage.getItemsForList(list.id);
+          for (const item of listItems) {
+            undoManager.push({ type: 'delete', entityType: 'item', id: item.id, data: { ...item } });
+          }
+          undoManager.push({ type: 'delete', entityType: 'list', id: list.id, data: { ...list } });
+          undoManager.endBatch();
+          await storage.deleteList(list.id);
+          const remaining = await storage.getListsForProject(projectId);
+          if (remaining.length > 0) {
+            onListSelect(remaining[0].id);
+            await renderListTabs(projectId, remaining[0].id);
+          }
+        }
+      });
+    });
+
     // Right-click context menu
     tab.addEventListener('contextmenu', (e) => {
       e.preventDefault();

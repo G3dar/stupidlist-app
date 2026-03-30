@@ -13,6 +13,7 @@ import * as helpOverlay from './helpOverlay.js';
 import * as multiSelect from './multiSelect.js';
 import * as undoManager from './undoManager.js';
 import * as hashtagAutocomplete from './hashtagAutocomplete.js';
+import { migrateStatuses } from './statusConfig.js';
 
 let currentDateKey = toDateKey(new Date());
 let currentView = 'day'; // 'day', 'project', or 'standalone'
@@ -52,6 +53,7 @@ document.addEventListener('blur', () => {
 
 export async function init() {
   await storage.open();
+  await migrateStatuses();
 
   // Check for stats page
   if (isStatsPage()) {
