@@ -187,6 +187,8 @@ header {
   font-family: var(--font-mono);
   font-size: 11px;
   cursor: pointer;
+  -webkit-touch-callout: none;
+  user-select: none;
   padding: 3px 10px;
   border-radius: 4px;
   transition: background 0.1s, color 0.1s;
@@ -227,10 +229,11 @@ header {
   border: none;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 26px;
   cursor: pointer;
   padding: 2px 4px;
   margin-right: 4px;
+  line-height: 1;
   transition: color 0.1s;
   -webkit-app-region: no-drag;
 }
@@ -243,6 +246,7 @@ header {
   font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.5px;
+  -webkit-touch-callout: none;
   user-select: none;
   cursor: default;
 }
@@ -274,6 +278,8 @@ header {
   padding: 8px 12px;
   cursor: pointer;
   font-size: 13px;
+  -webkit-touch-callout: none;
+  user-select: none;
   transition: background 0.1s;
 }
 
@@ -288,6 +294,19 @@ header {
 .project-row-count {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.project-row--empty {
+  background: #f0fdf4;
+}
+
+.project-row--empty:hover {
+  background: #dcfce7;
+}
+
+.project-row-count--empty {
+  color: #16a34a;
+  font-style: italic;
 }
 
 .project-row-updated {
@@ -329,6 +348,8 @@ header {
   padding: 8px 12px;
   cursor: pointer;
   font-size: 13px;
+  -webkit-touch-callout: none;
+  user-select: none;
   transition: background 0.1s;
 }
 
@@ -353,6 +374,20 @@ header {
 .list-row-count {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.list-row--empty {
+  background: #f0fdf4;
+}
+
+.list-row--empty:hover {
+  background: #dcfce7;
+}
+
+.list-row-count--empty {
+  color: #16a34a;
+  font-weight: 600;
+  font-style: italic;
 }
 
 .list-row-updated {
@@ -891,7 +926,12 @@ header {
   align-items: flex-start;
   min-height: var(--item-height);
   position: relative;
-  transition: opacity 0.15s, background 0.1s;
+  transition: opacity 0.15s;
+}
+@media (hover: hover) {
+  .item {
+    transition: opacity 0.15s, background 0.1s;
+  }
 }
 
 /* Border only after the last subitem of a group */
@@ -1872,6 +1912,18 @@ header {
 
 /* Responsive */
 @media (max-width: 480px) {
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: var(--bg);
+  }
+
+  .btn-help,
+  .btn-download {
+    display: none !important;
+  }
+
   #app {
     padding: 12px 10px;
   }

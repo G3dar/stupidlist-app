@@ -7,10 +7,12 @@ let currentDayDate = null;
 let itemsCache = []; // cached item data for the current day
 let showDone = localStorage.getItem('showDone') !== 'false'; // default true
 
-export async function render(dayDate) {
+export async function render(dayDate, opts = {}) {
   currentDayDate = dayDate;
   const list = document.getElementById('item-list');
-  list.innerHTML = '<li class="list-loading"></li>';
+  if (!opts.skipLoading) {
+    list.innerHTML = '<li class="list-loading"></li>';
+  }
 
   const items = await storage.getItemsForDay(dayDate);
   list.innerHTML = '';
@@ -104,20 +106,54 @@ async function handleConvertToSpacer(id, li) {
   const list = document.getElementById('item-list');
   const before = await storage.getItem(id);
 
+  // Check if this is the last active item (nothing after, or next is done-toggle)
+  const nextSibling = li.nextElementSibling;
+  const isLastActiveItem = !nextSibling || nextSibling.classList.contains('done-toggle');
+
+  if (isLastActiveItem) {
+    const prevSibling = li.previousElementSibling;
+    const prevHasContent = prevSibling
+      && !prevSibling.classList.contains('item--spacer')
+      && !prevSibling.classList.contains('done-toggle')
+      && prevSibling.querySelector('.item-text')
+      && prevSibling.querySelector('.item-text').textContent.trim() !== '';
+
+    if (!prevHasContent) return; // prev is empty/spacer/null → no-op
+
+    // Previous has content → convert to spacer only, no new empty item
+    undoManager.startBatch('insert spacer');
+    await storage.updateItem(id, { isSpacer: true });
+    if (before) {
+      undoManager.push({ type: 'update', entityType: 'item', id, before: { isSpacer: before.isSpacer || false }, after: { isSpacer: true } });
+    }
+    const spacerData = { ...before, isSpacer: true };
+    const spacerLi = createItemElement(spacerData, false);
+    li.replaceWith(spacerLi);
+    undoManager.endBatch();
+    renumber();
+    saveOrder();
+
+    // Focus previous text item
+    let focusTarget = spacerLi.previousElementSibling;
+    while (focusTarget && !focusTarget.querySelector('.item-text')) {
+      focusTarget = focusTarget.previousElementSibling;
+    }
+    if (focusTarget) setTimeout(() => item.focusText(focusTarget), 0);
+    return;
+  }
+
+  // Middle of list → existing behavior: spacer + new empty item
   undoManager.startBatch('insert spacer');
 
-  // Convert current empty item to spacer
   await storage.updateItem(id, { isSpacer: true });
   if (before) {
     undoManager.push({ type: 'update', entityType: 'item', id, before: { isSpacer: before.isSpacer || false }, after: { isSpacer: true } });
   }
 
-  // Replace DOM element with spacer version
   const spacerData = { ...before, isSpacer: true };
   const spacerLi = createItemElement(spacerData, false);
   li.replaceWith(spacerLi);
 
-  // Create new empty item below the spacer
   const newItemData = await storage.addItem(currentDayDate, '');
   undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
   const newLi = createItemElement(newItemData, false);

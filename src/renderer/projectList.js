@@ -21,11 +21,13 @@ function stg() {
   };
 }
 
-export async function render(listId, sharedContext = null) {
+export async function render(listId, sharedContext = null, opts = {}) {
   sharedCtx = sharedContext;
   currentListId = listId;
   const list = document.getElementById('item-list');
-  list.innerHTML = '<li class="list-loading"></li>';
+  if (!opts.skipLoading) {
+    list.innerHTML = '<li class="list-loading"></li>';
+  }
 
   const items = await stg().getItemsForList(listId);
   list.innerHTML = '';
@@ -114,20 +116,54 @@ async function handleConvertToSpacer(id, li) {
   const list = document.getElementById('item-list');
   const before = sharedCtx ? null : await storage.getItem(id);
 
+  // Check if this is the last active item (nothing after, or next is done-toggle)
+  const nextSibling = li.nextElementSibling;
+  const isLastActiveItem = !nextSibling || nextSibling.classList.contains('done-toggle');
+
+  if (isLastActiveItem) {
+    const prevSibling = li.previousElementSibling;
+    const prevHasContent = prevSibling
+      && !prevSibling.classList.contains('item--spacer')
+      && !prevSibling.classList.contains('done-toggle')
+      && prevSibling.querySelector('.item-text')
+      && prevSibling.querySelector('.item-text').textContent.trim() !== '';
+
+    if (!prevHasContent) return; // prev is empty/spacer/null → no-op
+
+    // Previous has content → convert to spacer only, no new empty item
+    if (!sharedCtx) undoManager.startBatch('insert spacer');
+    await stg().updateItem(id, { isSpacer: true });
+    if (before) {
+      undoManager.push({ type: 'update', entityType: 'item', id, before: { isSpacer: before.isSpacer || false }, after: { isSpacer: true } });
+    }
+    const spacerData = before ? { ...before, isSpacer: true } : { id, isSpacer: true };
+    const spacerLi = createItemElement(spacerData, false);
+    li.replaceWith(spacerLi);
+    if (!sharedCtx) undoManager.endBatch();
+    renumber();
+    saveOrder();
+
+    // Focus previous text item
+    let focusTarget = spacerLi.previousElementSibling;
+    while (focusTarget && !focusTarget.querySelector('.item-text')) {
+      focusTarget = focusTarget.previousElementSibling;
+    }
+    if (focusTarget) setTimeout(() => item.focusText(focusTarget), 0);
+    return;
+  }
+
+  // Middle of list → existing behavior: spacer + new empty item
   if (!sharedCtx) undoManager.startBatch('insert spacer');
 
-  // Convert current empty item to spacer
   await stg().updateItem(id, { isSpacer: true });
   if (before) {
     undoManager.push({ type: 'update', entityType: 'item', id, before: { isSpacer: before.isSpacer || false }, after: { isSpacer: true } });
   }
 
-  // Replace DOM element with spacer version
   const spacerData = before ? { ...before, isSpacer: true } : { id, isSpacer: true };
   const spacerLi = createItemElement(spacerData, false);
   li.replaceWith(spacerLi);
 
-  // Create new empty item below the spacer
   const newItemData = await stg().addItemToList(currentListId, '');
   if (!sharedCtx) undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
   const newLi = createItemElement(newItemData, false);

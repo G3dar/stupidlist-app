@@ -13,6 +13,7 @@ function addLongPress(element, callback) {
   let timer = null;
   let startX = 0;
   let startY = 0;
+  element.addEventListener('contextmenu', (e) => e.preventDefault());
   element.addEventListener('touchstart', (e) => {
     const touch = e.touches[0];
     startX = touch.clientX;
@@ -115,9 +116,16 @@ async function showDropdown() {
     name.className = 'list-row-name';
     name.textContent = list.name;
 
+    const realItems = items.filter(i => !i.isSpacer && (i.text || '').trim() !== '');
     const count = document.createElement('span');
     count.className = 'list-row-count';
-    count.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+    if (realItems.length === 0) {
+      count.textContent = 'empty';
+      count.classList.add('list-row-count--empty');
+      row.classList.add('list-row--empty');
+    } else {
+      count.textContent = `${realItems.length} item${realItems.length !== 1 ? 's' : ''}`;
+    }
 
     const updated = document.createElement('span');
     updated.className = 'list-row-updated';

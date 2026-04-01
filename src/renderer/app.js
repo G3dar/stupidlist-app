@@ -147,7 +147,7 @@ async function loadDay(dateKey) {
 
     // Subscribe to real-time updates from other devices
     storage.subscribe('day', dateKey, () => {
-      scheduleRemoteRender(() => dayList.render(dateKey));
+      scheduleRemoteRender(() => dayList.render(dateKey, { skipLoading: true }));
     });
   } finally {
     resolve();
@@ -181,7 +181,7 @@ async function loadProject(projectId, listId) {
 
   // Subscribe to real-time updates from other devices
   storage.subscribe('list', listId, () => {
-    scheduleRemoteRender(() => projectList.render(listId));
+    scheduleRemoteRender(() => projectList.render(listId, null, { skipLoading: true }));
   });
 }
 
@@ -191,7 +191,7 @@ async function loadList(listId) {
   await projectList.render(listId);
 
   storage.subscribe('list', listId, () => {
-    scheduleRemoteRender(() => projectList.render(listId));
+    scheduleRemoteRender(() => projectList.render(listId, null, { skipLoading: true }));
   });
 }
 
@@ -212,7 +212,7 @@ async function loadStandaloneList(listId, autoFocusTitle) {
 
   // Subscribe to real-time updates
   storage.subscribe('list', listId, () => {
-    scheduleRemoteRender(() => projectList.render(listId));
+    scheduleRemoteRender(() => projectList.render(listId, null, { skipLoading: true }));
   });
 }
 

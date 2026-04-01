@@ -1,7 +1,7 @@
 {
   "name": "stupidlist",
   "productName": "stupidlist",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "A stupid simple daily list app",
   "main": "src/main/index.js",
   "scripts": {

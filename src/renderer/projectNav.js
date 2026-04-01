@@ -13,6 +13,7 @@ function addLongPress(element, callback) {
   let timer = null;
   let startX = 0;
   let startY = 0;
+  element.addEventListener('contextmenu', (e) => e.preventDefault());
   element.addEventListener('touchstart', (e) => {
     const touch = e.touches[0];
     startX = touch.clientX;
@@ -92,7 +93,7 @@ async function showDropdown() {
     let lastUpdated = project.updatedAt || 0;
     for (const list of lists) {
       const items = await storage.getItemsForList(list.id);
-      totalItems += items.length;
+      totalItems += items.filter(i => !i.isSpacer && (i.text || '').trim() !== '').length;
       if (list.updatedAt > lastUpdated) lastUpdated = list.updatedAt;
       for (const item of items) {
         if (item.updatedAt > lastUpdated) lastUpdated = item.updatedAt;
@@ -108,7 +109,13 @@ async function showDropdown() {
 
     const count = document.createElement('span');
     count.className = 'project-row-count';
-    count.textContent = `${lists.length} list${lists.length !== 1 ? 's' : ''} · ${totalItems} item${totalItems !== 1 ? 's' : ''}`;
+    if (totalItems === 0) {
+      count.textContent = `${lists.length} list${lists.length !== 1 ? 's' : ''} · empty`;
+      count.classList.add('project-row-count--empty');
+      row.classList.add('project-row--empty');
+    } else {
+      count.textContent = `${lists.length} list${lists.length !== 1 ? 's' : ''} · ${totalItems} item${totalItems !== 1 ? 's' : ''}`;
+    }
 
     const updated = document.createElement('span');
     updated.className = 'project-row-updated';

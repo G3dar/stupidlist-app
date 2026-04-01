@@ -78,13 +78,16 @@ export function create(itemData, callbacks) {
       if (swiping) {
         e.preventDefault();
         li.style.transform = `translateX(${dx}px)`;
-        if (dx < -30) {
+        // Hysteresis: activate at 30px, deactivate at 20px to avoid flicker from finger jitter
+        const hasLeft = li.classList.contains('item--swiping-left');
+        const hasRight = li.classList.contains('item--swiping-right');
+        if (dx < -30 && !hasLeft) {
           li.classList.add('item--swiping-left');
           li.classList.remove('item--swiping-right');
-        } else if (dx > 30) {
+        } else if (dx > 30 && !hasRight) {
           li.classList.add('item--swiping-right');
           li.classList.remove('item--swiping-left');
-        } else {
+        } else if (dx > -20 && dx < 20) {
           li.classList.remove('item--swiping-left', 'item--swiping-right');
         }
         return;
@@ -99,6 +102,7 @@ export function create(itemData, callbacks) {
             const active = document.activeElement;
             if (active && active.classList.contains('item-text') && li.contains(active)) return;
             swiping = true;
+            li.style.willChange = 'transform';
             e.preventDefault();
           }
           // If vertical dominant, do nothing — let browser scroll
@@ -153,6 +157,7 @@ export function create(itemData, callbacks) {
           li.style.transform = '';
           li.addEventListener('transitionend', function handler() {
             li.style.transition = '';
+            li.style.willChange = '';
             li.removeEventListener('transitionend', handler);
           }, { once: true });
         }
@@ -190,6 +195,7 @@ export function create(itemData, callbacks) {
       li.classList.remove('touch-active', 'dragging', 'item--swiping-left', 'item--swiping-right');
       li.style.transform = '';
       li.style.transition = '';
+      li.style.willChange = '';
       document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
       longPressed = false;
       dragging = false;
