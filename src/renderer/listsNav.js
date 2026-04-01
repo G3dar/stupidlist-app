@@ -20,6 +20,7 @@ function addLongPress(element, callback) {
     startY = touch.clientY;
     timer = setTimeout(() => {
       element._longPressed = true;
+      window.getSelection().removeAllRanges();
       if (navigator.vibrate) navigator.vibrate(50);
       callback(touch.clientX, touch.clientY);
     }, 500);
@@ -92,9 +93,21 @@ async function showDropdown() {
   dd.style.display = 'block';
   dd.innerHTML = '';
 
-  const lists = await storage.getStandaloneLists();
+  const allLists = await storage.getStandaloneLists();
 
-  if (lists.length === 0) {
+  // Filter out abandoned empty lists with default names (grace period: 2 min)
+  const now = Date.now();
+  const visibleLists = [];
+  for (const list of allLists) {
+    const items = await storage.getItemsForList(list.id);
+    const realItems = items.filter(i => !i.isSpacer && (i.text || '').trim() !== '');
+    const isDefault = !list.name || list.name === 'Untitled list';
+    const isFresh = (now - list.createdAt) < 120000;
+    if (realItems.length === 0 && isDefault && !isFresh) continue;
+    visibleLists.push({ list, items, realItems });
+  }
+
+  if (visibleLists.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'list-row list-row-empty';
     empty.textContent = 'No lists yet. Click "new" to create one.';
@@ -102,8 +115,7 @@ async function showDropdown() {
     return;
   }
 
-  for (const list of lists) {
-    const items = await storage.getItemsForList(list.id);
+  for (const { list, items, realItems } of visibleLists) {
     let lastUpdated = list.updatedAt || 0;
     for (const item of items) {
       if (item.updatedAt > lastUpdated) lastUpdated = item.updatedAt;
@@ -116,7 +128,6 @@ async function showDropdown() {
     name.className = 'list-row-name';
     name.textContent = list.name;
 
-    const realItems = items.filter(i => !i.isSpacer && (i.text || '').trim() !== '');
     const count = document.createElement('span');
     count.className = 'list-row-count';
     if (realItems.length === 0) {

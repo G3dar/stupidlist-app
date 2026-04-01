@@ -188,6 +188,7 @@ header {
   font-size: 11px;
   cursor: pointer;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
   padding: 3px 10px;
   border-radius: 4px;
@@ -247,6 +248,7 @@ header {
   font-weight: 700;
   letter-spacing: -0.5px;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
   cursor: default;
 }
@@ -279,6 +281,7 @@ header {
   cursor: pointer;
   font-size: 13px;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
   transition: background 0.1s;
 }
@@ -349,6 +352,7 @@ header {
   cursor: pointer;
   font-size: 13px;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
   transition: background 0.1s;
 }

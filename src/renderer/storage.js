@@ -266,6 +266,43 @@ export async function syncWithCloud() {
   }
 }
 
+// ─── Cleanup abandoned empty lists ───
+
+export async function cleanupEmptyLists() {
+  const now = Date.now();
+
+  // Standalone lists
+  const standaloneLists = await local.getStandaloneLists();
+  for (const list of standaloneLists) {
+    const isDefault = !list.name || list.name === 'Untitled list';
+    if (!isDefault) continue;
+    if ((now - list.createdAt) < 120000) continue;
+    const items = await local.getItemsForList(list.id);
+    const realItems = items.filter(i => !i.isSpacer && (i.text || '').trim() !== '');
+    if (realItems.length > 0) continue;
+    await deleteList(list.id);
+  }
+
+  // Project lists
+  const projects = await local.getAllProjects();
+  for (const project of projects) {
+    const lists = await local.getListsForProject(project.id);
+    if (lists.length <= 1) continue;
+    for (const list of lists) {
+      const isDefault = /^List \d+$/.test(list.name) || !list.name;
+      if (!isDefault) continue;
+      if ((now - list.createdAt) < 120000) continue;
+      const items = await local.getItemsForList(list.id);
+      const realItems = items.filter(i => !i.isSpacer && (i.text || '').trim() !== '');
+      if (realItems.length > 0) continue;
+      // Re-check count to avoid deleting the last list
+      const remaining = await local.getListsForProject(project.id);
+      if (remaining.filter(l => l.id !== list.id).length < 1) continue;
+      await deleteList(list.id);
+    }
+  }
+}
+
 // ─── Real-time subscriptions ───
 
 let currentUnsub = null;

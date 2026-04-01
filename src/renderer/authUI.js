@@ -1,6 +1,6 @@
 import { signIn, signOut, onAuthChange } from './auth.js';
 import { checkAndMigrate, uploadLocalData } from './migration.js';
-import { syncWithCloud, recordLogin } from './storage.js';
+import { syncWithCloud, cleanupEmptyLists, recordLogin } from './storage.js';
 import { clearAll } from './storage-local.js';
 
 let authArea = null;
@@ -31,6 +31,7 @@ export function init(reloadCallback) {
         console.warn('Cloud sync skipped:', err.message);
       }
     }
+    cleanupEmptyLists().catch(() => {});
     if (onReload) onReload();
   });
 

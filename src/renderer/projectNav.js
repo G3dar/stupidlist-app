@@ -20,6 +20,7 @@ function addLongPress(element, callback) {
     startY = touch.clientY;
     timer = setTimeout(() => {
       element._longPressed = true;
+      window.getSelection().removeAllRanges();
       if (navigator.vibrate) navigator.vibrate(50);
       callback(touch.clientX, touch.clientY);
     }, 500);
@@ -437,7 +438,22 @@ async function renderListTabs(projectId, activeListId) {
   const listNav = document.getElementById('list-nav');
   listNav.innerHTML = '';
 
-  const lists = await storage.getListsForProject(projectId);
+  const allLists = await storage.getListsForProject(projectId);
+
+  // Filter out abandoned empty lists with default names (keep at least 1, keep active)
+  const now = Date.now();
+  const lists = [];
+  for (const list of allLists) {
+    if (allLists.length <= 1 || list.id === activeListId) { lists.push(list); continue; }
+    const isDefault = /^List \d+$/.test(list.name) || !list.name;
+    const isFresh = (now - list.createdAt) < 120000;
+    if (isDefault && !isFresh) {
+      const items = await storage.getItemsForList(list.id);
+      const realItems = items.filter(i => !i.isSpacer && (i.text || '').trim() !== '');
+      if (realItems.length === 0) continue;
+    }
+    lists.push(list);
+  }
 
   for (const list of lists) {
     const tab = document.createElement('button');
