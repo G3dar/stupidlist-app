@@ -536,6 +536,15 @@ export async function exportAll() {
   };
 }
 
+export async function exportAllRaw() {
+  await open();
+  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE], 'readonly');
+  const items = await promisify(tx.objectStore(ITEMS_STORE).getAll());
+  const projects = await promisify(tx.objectStore(PROJECTS_STORE).getAll());
+  const lists = await promisify(tx.objectStore(LISTS_STORE).getAll());
+  return { items, projects, lists };
+}
+
 export async function clearAll() {
   await open();
   const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE], 'readwrite');

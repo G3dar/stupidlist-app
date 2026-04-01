@@ -8,7 +8,16 @@ import { authState, onAuthChange } from './auth.js';
 
 function syncToCloud(fn) {
   if (!authState.isLoggedIn) return;
-  fn().catch(err => console.warn('Cloud sync:', err.message));
+  const attempt = (retries, delay) => {
+    fn().catch(err => {
+      if (retries > 0) {
+        setTimeout(() => attempt(retries - 1, delay * 2), delay);
+      } else {
+        console.warn('Cloud sync failed after retries:', err.message);
+      }
+    });
+  };
+  attempt(3, 1000);
 }
 
 // ─── Init ───
@@ -182,41 +191,78 @@ export function sharedListenToList(uid, lid, cb) { return cloud.sharedListenToLi
 export function recordLogin(user) { return cloud.recordLogin(user); }
 export function getAllLogins() { return cloud.getAllLogins(); }
 
-// ─── Cloud → Local sync (on login / app load) ───
+// ─── Bidirectional sync (on login / app load / reconnect) ───
 
-export async function pullFromCloud() {
+let syncInProgress = false;
+let syncQueued = false;
+
+export async function syncWithCloud() {
   if (!authState.isLoggedIn) return;
+  if (syncInProgress) {
+    syncQueued = true;
+    return;
+  }
+  syncInProgress = true;
   try {
     const cloudData = await cloud.exportAll();
     await local.open();
-    const localData = await local.exportAll();
+    const localData = await local.exportAllRaw();
 
-    // Merge cloud items into local (cloud wins if newer)
     const localItemMap = new Map(localData.items.map(i => [i.id, i]));
+    const localProjMap = new Map(localData.projects.map(p => [p.id, p]));
+    const localListMap = new Map(localData.lists.map(l => [l.id, l]));
+
+    const cloudItemMap = new Map(cloudData.items.map(i => [i.id, i]));
+    const cloudProjMap = new Map(cloudData.projects.map(p => [p.id, p]));
+    const cloudListMap = new Map(cloudData.lists.map(l => [l.id, l]));
+
+    // Cloud → Local (cloud wins if newer)
     for (const ci of cloudData.items) {
       const li = localItemMap.get(ci.id);
       if (!li || ci.updatedAt > li.updatedAt) {
         await local.upsertItem(ci);
       }
     }
-
-    const localProjMap = new Map(localData.projects.map(p => [p.id, p]));
     for (const cp of cloudData.projects) {
       const lp = localProjMap.get(cp.id);
       if (!lp || cp.updatedAt > lp.updatedAt) {
         await local.upsertProject(cp);
       }
     }
-
-    const localListMap = new Map(localData.lists.map(l => [l.id, l]));
     for (const cl of cloudData.lists) {
       const ll = localListMap.get(cl.id);
       if (!ll || cl.updatedAt > ll.updatedAt) {
         await local.upsertList(cl);
       }
     }
+
+    // Local → Cloud (push items that never reached cloud or are newer locally)
+    for (const li of localData.items) {
+      const ci = cloudItemMap.get(li.id);
+      if (!ci || li.updatedAt > ci.updatedAt) {
+        await cloud.upsertItem(li);
+      }
+    }
+    for (const lp of localData.projects) {
+      const cp = cloudProjMap.get(lp.id);
+      if (!cp || lp.updatedAt > cp.updatedAt) {
+        await cloud.upsertProject(lp);
+      }
+    }
+    for (const ll of localData.lists) {
+      const cl = cloudListMap.get(ll.id);
+      if (!cl || ll.updatedAt > cl.updatedAt) {
+        await cloud.upsertList(ll);
+      }
+    }
   } catch (err) {
-    console.warn('Pull from cloud failed:', err.message);
+    console.warn('Sync with cloud failed:', err.message);
+  } finally {
+    syncInProgress = false;
+    if (syncQueued) {
+      syncQueued = false;
+      syncWithCloud();
+    }
   }
 }
 

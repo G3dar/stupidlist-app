@@ -1,6 +1,6 @@
 import { signIn, signOut, onAuthChange } from './auth.js';
 import { checkAndMigrate, uploadLocalData } from './migration.js';
-import { pullFromCloud, recordLogin } from './storage.js';
+import { syncWithCloud, recordLogin } from './storage.js';
 import { clearAll } from './storage-local.js';
 
 let authArea = null;
@@ -24,7 +24,7 @@ export function init(reloadCallback) {
       // Cloud pull can timeout — it's a network operation
       try {
         await Promise.race([
-          pullFromCloud(),
+          syncWithCloud(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Cloud sync timeout')), 15000))
         ]);
       } catch (err) {
@@ -34,14 +34,22 @@ export function init(reloadCallback) {
     if (onReload) onReload();
   });
 
-  // Re-pull from cloud when app returns to foreground
+  // Sync with cloud when app returns to foreground
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible') {
       try {
-        await pullFromCloud();
+        await syncWithCloud();
       } catch {}
       if (onReload) onReload();
     }
+  });
+
+  // Sync when network reconnects (covers mobile offline→online)
+  window.addEventListener('online', async () => {
+    try {
+      await syncWithCloud();
+    } catch {}
+    if (onReload) onReload();
   });
 
   // Render initial state (logged out)
@@ -151,7 +159,7 @@ async function handleMigration(uid) {
           await uploadLocalData(uid, result.localData);
         }
         // Clear local IndexedDB so orphaned items don't linger.
-        // pullFromCloud() will repopulate from the cloud source of truth.
+        // syncWithCloud() will repopulate from the cloud source of truth.
         await clearAll();
         localStorage.setItem(migrationKey, '1');
         resolve();
