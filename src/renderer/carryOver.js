@@ -114,8 +114,9 @@ export async function check(targetDate, onRefresh) {
         e.stopPropagation();
         row.classList.add('moving');
         await storage.deleteItem(item.id);
+        const scrollY = window.scrollY;
         await check(targetDate, onRefresh);
-        onRefresh();
+        window.scrollTo(0, scrollY);
       });
 
       row.appendChild(text);
@@ -129,7 +130,9 @@ export async function check(targetDate, onRefresh) {
           e.preventDefault();
           row.classList.add('moving');
           await storage.deleteItem(item.id);
+          const scrollY = window.scrollY;
           await check(targetDate, onRefresh);
+          window.scrollTo(0, scrollY);
         }
       });
 
@@ -138,7 +141,9 @@ export async function check(targetDate, onRefresh) {
         // Add as new item to target day, then mark original as done
         await storage.addItem(targetDate, item.text);
         await storage.updateItem(item.id, { done: true });
+        const scrollY = window.scrollY;
         await check(targetDate, onRefresh);
+        window.scrollTo(0, scrollY);
         onRefresh();
       });
 
