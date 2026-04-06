@@ -106,9 +106,22 @@ export async function check(targetDate, onRefresh) {
       hint.className = 'bring-hint';
       hint.textContent = '←';
 
+      const deleteBtn = document.createElement('span');
+      deleteBtn.className = 'carry-over-delete';
+      deleteBtn.textContent = '×';
+      deleteBtn.title = 'Delete item';
+      deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        row.classList.add('moving');
+        await storage.deleteItem(item.id);
+        await check(targetDate, onRefresh);
+        onRefresh();
+      });
+
       row.appendChild(text);
       if (status !== 'not_started') row.appendChild(badge);
       row.appendChild(hint);
+      row.appendChild(deleteBtn);
 
       // Middle-click: delete the carry-over item
       row.addEventListener('mousedown', async (e) => {

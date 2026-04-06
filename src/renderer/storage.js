@@ -56,7 +56,12 @@ export async function updateItem(id, c) {
 
 export async function deleteItem(id) {
   await local.deleteItem(id);
-  syncToCloud(() => cloud.updateItem(id, { deleted: true, updatedAt: Date.now() }));
+  const item = await local.getItem(id);
+  if (item) {
+    syncToCloud(() => cloud.upsertItem(item));
+  } else {
+    syncToCloud(() => cloud.upsertItem({ id, deleted: true, updatedAt: Date.now() }));
+  }
 }
 
 export async function moveItemToDay(id, d) {

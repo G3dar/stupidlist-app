@@ -911,6 +911,24 @@ header {
   transition: opacity 0.1s;
 }
 
+.carry-over-delete {
+  font-size: 18px;
+  color: var(--text-muted);
+  opacity: 0;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.carry-over-item:hover .carry-over-delete {
+  opacity: 0.6;
+}
+
+.carry-over-delete:hover {
+  opacity: 1 !important;
+  color: #dc2626;
+}
+
 /* Item list */
 #list-container {
   flex: 1;
