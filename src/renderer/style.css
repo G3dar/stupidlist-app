@@ -582,6 +582,79 @@ header {
   margin: 4px 0;
 }
 
+/* Thumb menu (mobile double-tap navigation) */
+.thumb-menu {
+  position: fixed;
+  z-index: 10000;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.thumb-menu-item {
+  display: block;
+  width: 100%;
+  padding: 14px 18px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.thumb-menu-item:active {
+  background: var(--accent-light);
+}
+
+.thumb-menu-subitem {
+  padding-left: 28px;
+  font-size: 14px;
+}
+
+.thumb-menu-back {
+  display: block;
+  width: 100%;
+  padding: 10px 18px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.thumb-menu-back:active {
+  background: var(--accent-light);
+}
+
+.thumb-menu-header {
+  padding: 8px 18px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.thumb-menu-empty {
+  padding: 14px 18px;
+  font-size: 14px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
 /* Color picker rows in context menu */
 .ctx-color-row {
   display: flex;
@@ -1843,6 +1916,10 @@ header {
   background: linear-gradient(to left, #dcfce7 0%, transparent 60%);
 }
 
+.item--done.item--swiping-left {
+  background: linear-gradient(to left, #fecaca 0%, transparent 60%);
+}
+
 .item--swiping-right {
   background: linear-gradient(to right, #fef3c7 0%, transparent 60%);
 }
@@ -1932,6 +2009,11 @@ header {
   border-color: var(--accent);
 }
 
+/* Hide hamburger menu on desktop */
+.nav-menu {
+  display: none;
+}
+
 /* Responsive */
 @media (max-width: 480px) {
   header {
@@ -1939,73 +2021,174 @@ header {
     top: 0;
     z-index: 1000;
     background: var(--bg);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+    padding-bottom: 10px;
+    margin-bottom: 8px;
+    border-bottom-width: 1px;
   }
 
   .btn-help,
-  .btn-download {
+  .btn-download,
+  .btn-copy,
+  .nav-settings {
     display: none !important;
   }
 
   #app {
-    padding: 12px 10px;
+    padding: 8px 14px;
   }
 
-  .logo {
+  /* Hide default header-left content (logo, copy, new) but keep container for back button */
+  .header-left {
+    display: none !important;
+  }
+
+  /* Show header-left when it contains a back button (list/project view) */
+  .header-left:has(.btn-back) {
+    display: flex !important;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nav-lists, .nav-projects {
+    display: none !important;
+  }
+
+  /* Hamburger menu button */
+  .nav-menu {
+    display: inline-flex !important;
+    font-size: 22px;
+    padding: 6px 10px;
+    min-height: 40px;
+    min-width: 40px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Auth */
+  .header-auth {
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+
+  .auth-btn {
     font-size: 13px;
+    padding: 6px 12px;
+    white-space: nowrap;
   }
 
+  .auth-avatar img {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* Navigation: single line, centered */
   .header-right {
-    gap: 4px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   #day-nav {
-    gap: 4px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex: 1;
+    justify-content: center;
   }
 
   .nav-btn {
-    font-size: 13px;
-    padding: 2px 5px;
-  }
-
-  .btn-new {
-    width: 20px;
-    height: 20px;
-    font-size: 14px;
-  }
-
-  .nav-projects, .nav-lists {
-    font-size: 9px;
-    padding: 2px 6px;
-  }
-
-  .nav-today {
-    font-size: 10px;
-    padding: 2px 6px;
+    font-size: 18px;
+    padding: 6px 10px;
+    min-height: 40px;
+    min-width: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .date-label {
-    font-size: 12px;
-    min-width: 40px;
+    font-size: 17px;
+    font-weight: 700;
+    text-align: center;
+    padding: 0 4px;
+  }
+
+  .nav-today {
+    font-size: 13px;
+    padding: 6px 12px;
+    min-height: 40px;
+  }
+
+  /* Hamburger dropdown menu */
+  .menu-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 1001;
+    min-width: 160px;
+    padding: 4px 0;
+  }
+
+  .menu-dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text);
+  }
+
+  .menu-dropdown-item:active {
+    background: var(--accent-light);
+  }
+
+  /* Items: bigger touch targets */
+  .item {
+    min-height: 44px;
   }
 
   .item-number {
-    width: 28px;
-    font-size: 11px;
+    width: 30px;
+    font-size: 12px;
+  }
+
+  .item-text {
+    padding: 10px 4px;
+    font-size: 16px;
   }
 
   /* Icon-only status on mobile */
   .item-status {
     min-width: auto;
-    font-size: 14px;
-    padding: 3px 6px;
+    font-size: 16px;
+    padding: 4px 8px;
   }
 
   .status-label {
     display: none;
   }
 
-  .item-text {
-    padding: 8px 2px;
+  .item-done {
+    width: 44px;
+    font-size: 20px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .settings-dialog {
@@ -2444,4 +2627,38 @@ header {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* ── Capacitor / iOS safe areas ── */
+
+@supports (padding-top: env(safe-area-inset-top)) {
+  #app {
+    padding-top: calc(20px + env(safe-area-inset-top));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    padding-left: calc(10px + env(safe-area-inset-left));
+    padding-right: calc(10px + env(safe-area-inset-right));
+  }
+
+  @media (max-width: 480px) {
+    header {
+      top: env(safe-area-inset-top);
+    }
+  }
+
+  .multiselect-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+    height: calc(48px + env(safe-area-inset-bottom));
+  }
+
+  .context-menu {
+    max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 20px);
+  }
+}
+
+/* Prevent iOS auto-zoom on contenteditable and inputs (triggered below 16px) */
+@media screen and (max-width: 480px) {
+  .item-text[contenteditable="true"],
+  input, select, textarea {
+    font-size: 16px;
+  }
 }

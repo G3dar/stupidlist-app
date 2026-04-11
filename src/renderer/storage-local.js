@@ -116,7 +116,7 @@ export async function getItemsForDay(dayDate) {
     .sort((a, b) => a.order - b.order);
 }
 
-export async function addItem(dayDate, text = '') {
+export async function addItem(dayDate, text = '', extras = {}) {
   await open();
   const existing = await getItemsForDay(dayDate);
   const maxOrder = existing.length > 0 ? Math.max(...existing.map(i => i.order)) + 1 : 0;
@@ -134,7 +134,8 @@ export async function addItem(dayDate, text = '') {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     movedFrom: null,
-    deleted: false
+    deleted: false,
+    ...extras
   };
 
   const store = getStore(ITEMS_STORE, 'readwrite');

@@ -15,7 +15,9 @@
     "relaunch": "powershell -Command \"Get-Process electron -EA 0 | Where-Object { $_.Path -like '*stupidlist*' } | Stop-Process -Force\" & timeout /t 2 /nobreak >nul & npm run build && electron .",
     "dev": "concurrently \"esbuild src/renderer/index.js --bundle --outfile=dist/renderer.js --platform=browser --loader:.css=css --watch\" \"esbuild src/main/preload.js --bundle --outfile=dist/preload.js --platform=node --external:electron --watch\" \"electron .\"",
     "dist:win": "npm run build:all && electron-builder --win",
-    "dist:mac": "npm run build:all && electron-builder --mac"
+    "dist:mac": "npm run build:all && electron-builder --mac",
+    "build:ios": "npm run build:web && npx cap sync ios",
+    "open:ios": "npx cap open ios"
   },
   "build": {
     "appId": "app.stupidlist",
@@ -49,9 +51,21 @@
   "devDependencies": {
     "electron": "^40.8.0",
     "electron-builder": "^26.4.0",
-    "esbuild": "^0.27.2"
+    "esbuild": "^0.27.2",
+    "typescript": "^6.0.2"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/browser": "^8.0.3",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.3.0",
+    "@capacitor/keyboard": "^8.0.3",
+    "@capacitor/share": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
+    "@southdevs/capacitor-google-auth": "^7.0.0",
     "firebase": "^12.11.0"
   }
 }

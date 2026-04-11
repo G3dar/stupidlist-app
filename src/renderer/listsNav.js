@@ -2,6 +2,7 @@ import * as storage from './storage.js';
 import { authState } from './auth.js';
 import * as undoManager from './undoManager.js';
 import { showDeleteConfirm } from './deleteConfirm.js';
+import { hapticFeedback } from '../shared/platform.js';
 
 let onNewList = null;
 let onListSelect = null;
@@ -21,7 +22,7 @@ function addLongPress(element, callback) {
     timer = setTimeout(() => {
       element._longPressed = true;
       window.getSelection().removeAllRanges();
-      if (navigator.vibrate) navigator.vibrate(50);
+      hapticFeedback();
       callback(touch.clientX, touch.clientY);
     }, 500);
   }, { passive: true });
@@ -70,7 +71,7 @@ async function handleNewList() {
   onNewList(list.id, true); // true = auto-focus title for rename
 }
 
-async function toggleDropdown() {
+export async function toggleDropdown() {
   if (dropdownVisible) {
     hideDropdown();
   } else {
@@ -348,9 +349,11 @@ export async function showStandaloneListHeader(listId, autoFocusTitle) {
   const list = await storage.getList(listId);
   if (!list) return;
 
-  // Hide day nav
+  // Hide day nav and hamburger menu
   document.getElementById('day-nav').style.display = 'none';
   document.getElementById('list-nav').style.display = 'flex';
+  const menuBtn = document.getElementById('btn-menu');
+  if (menuBtn) menuBtn.style.display = 'none';
 
   // Replace logo with back button + list name
   logo.innerHTML = '';

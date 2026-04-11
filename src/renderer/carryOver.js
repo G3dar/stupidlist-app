@@ -3,6 +3,17 @@ import { formatDateLabel } from '../shared/constants.js';
 
 let expanded = false;
 
+function pickExtras(item) {
+  const extras = {};
+  if (item.projectTag) extras.projectTag = item.projectTag;
+  if (item.projectId) extras.projectId = item.projectId;
+  if (item.tagListId) extras.tagListId = item.tagListId;
+  if (item.color) extras.color = item.color;
+  if (item.bgColor) extras.bgColor = item.bgColor;
+  if (item.status && item.status !== 'not_started') extras.status = item.status;
+  return extras;
+}
+
 export async function check(targetDate, onRefresh) {
   const container = document.getElementById('carry-over');
   container.innerHTML = '';
@@ -33,7 +44,7 @@ export async function check(targetDate, onRefresh) {
     bringAllBtn.disabled = true;
     bringAllBtn.textContent = '...';
     for (const item of incomplete) {
-      await storage.addItem(targetDate, item.text);
+      await storage.addItem(targetDate, item.text, pickExtras(item));
       await storage.updateItem(item.id, { done: true });
     }
     expanded = false;
@@ -78,7 +89,7 @@ export async function check(targetDate, onRefresh) {
       bringDayBtn.disabled = true;
       bringDayBtn.textContent = '...';
       for (const item of groups[day]) {
-        await storage.addItem(targetDate, item.text);
+        await storage.addItem(targetDate, item.text, pickExtras(item));
         await storage.updateItem(item.id, { done: true });
       }
       await check(targetDate, onRefresh);
@@ -139,7 +150,7 @@ export async function check(targetDate, onRefresh) {
       row.addEventListener('click', async () => {
         row.classList.add('moving');
         // Add as new item to target day, then mark original as done
-        await storage.addItem(targetDate, item.text);
+        await storage.addItem(targetDate, item.text, pickExtras(item));
         await storage.updateItem(item.id, { done: true });
         const scrollY = window.scrollY;
         await check(targetDate, onRefresh);

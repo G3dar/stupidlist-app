@@ -6,10 +6,44 @@ import * as undoManager from './undoManager.js';
 let currentDayDate = null;
 let itemsCache = []; // cached item data for the current day
 let showDone = localStorage.getItem('showDone') !== 'false'; // default true
+let placeholderText = null; // text typed in placeholder before data loads
+
+// Show an instant editable item before storage is ready
+export function renderInstantPlaceholder() {
+  const list = document.getElementById('item-list');
+  list.innerHTML = '';
+
+  const li = document.createElement('li');
+  li.className = 'item';
+  li.dataset.placeholder = 'true';
+
+  const num = document.createElement('span');
+  num.className = 'item-number';
+  num.textContent = '1.';
+  li.appendChild(num);
+
+  const text = document.createElement('div');
+  text.className = 'item-text';
+  text.contentEditable = 'true';
+  text.setAttribute('data-placeholder', 'Type something...');
+  text.addEventListener('input', () => {
+    placeholderText = text.textContent;
+  });
+  li.appendChild(text);
+
+  list.appendChild(li);
+  setTimeout(() => text.focus(), 0);
+}
 
 export async function render(dayDate, opts = {}) {
   currentDayDate = dayDate;
   const list = document.getElementById('item-list');
+
+  // Flush any unsaved text before clearing DOM — the blur handler saves immediately
+  const activeText = list.querySelector('.item-text:focus');
+  const focusedId = activeText ? activeText.closest('.item')?.dataset?.id : null;
+  if (activeText) activeText.blur();
+
   if (!opts.skipLoading) {
     list.innerHTML = '<li class="list-loading"></li>';
   }
@@ -17,9 +51,23 @@ export async function render(dayDate, opts = {}) {
   const items = await storage.getItemsForDay(dayDate);
   list.innerHTML = '';
 
+  // Absorb text typed in the instant placeholder
+  const pendingText = placeholderText;
+  placeholderText = null;
+
   if (items.length === 0) {
-    const newItem = await storage.addItem(dayDate, '');
+    const newItem = await storage.addItem(dayDate, pendingText || '');
     items.push(newItem);
+  } else if (pendingText) {
+    // User typed while loading — save it to the first empty item or create a new one
+    const emptyItem = items.find(i => !i.text && !i.done);
+    if (emptyItem) {
+      await storage.updateItem(emptyItem.id, { text: pendingText });
+      emptyItem.text = pendingText;
+    } else {
+      const newItem = await storage.addItem(dayDate, pendingText);
+      items.push(newItem);
+    }
   }
 
   // Build parent set
@@ -82,6 +130,12 @@ export async function render(dayDate, opts = {}) {
 
   renumber();
   multiSelect.reapply();
+
+  // Restore focus to the item the user was editing
+  if (focusedId) {
+    const restoredLi = list.querySelector(`[data-id="${focusedId}"]`);
+    if (restoredLi) item.focusText(restoredLi);
+  }
 }
 
 function createItemElement(itemData, isParent = false) {
@@ -173,6 +227,12 @@ async function handleToggleDone(id, li) {
   const items = await storage.getItemsForDay(currentDayDate);
   const targetItem = items.find(i => i.id === id);
   if (!targetItem) return;
+
+  // If marking done and item has no text, delete it instead
+  if (!targetItem.done && (!targetItem.text || !targetItem.text.trim())) {
+    await handleDelete(id, li);
+    return;
+  }
 
   const newDone = !targetItem.done;
   const parentIds = new Set(items.filter(i => i.parentId).map(i => i.parentId));

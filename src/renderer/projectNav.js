@@ -2,6 +2,7 @@ import * as storage from './storage.js';
 import { authState } from './auth.js';
 import * as undoManager from './undoManager.js';
 import { showDeleteConfirm } from './deleteConfirm.js';
+import { hapticFeedback } from '../shared/platform.js';
 
 let onProjectSelect = null;
 let onListSelect = null;
@@ -21,7 +22,7 @@ function addLongPress(element, callback) {
     timer = setTimeout(() => {
       element._longPressed = true;
       window.getSelection().removeAllRanges();
-      if (navigator.vibrate) navigator.vibrate(50);
+      hapticFeedback();
       callback(touch.clientX, touch.clientY);
     }, 500);
   }, { passive: true });
@@ -62,7 +63,7 @@ export function init(callbacks) {
   });
 }
 
-async function toggleDropdown() {
+export async function toggleDropdown() {
   if (dropdownVisible) {
     hideDropdown();
   } else {
@@ -224,8 +225,10 @@ export async function showProjectHeader(projectId, activeListId) {
   projectsBtn.style.display = 'none';
   const newListBtn = document.getElementById('btn-new-list');
   const listsBtn = document.getElementById('btn-lists');
+  const menuBtn = document.getElementById('btn-menu');
   if (newListBtn) newListBtn.style.display = 'none';
   if (listsBtn) listsBtn.style.display = 'none';
+  if (menuBtn) menuBtn.style.display = 'none';
 
   // Replace logo with back button + project name
   logo.innerHTML = '';
@@ -682,8 +685,10 @@ export function restoreDayHeader() {
   document.getElementById('btn-projects').style.display = '';
   const newListBtn = document.getElementById('btn-new-list');
   const listsBtn = document.getElementById('btn-lists');
+  const menuBtn = document.getElementById('btn-menu');
   if (newListBtn) newListBtn.style.display = '';
   if (listsBtn) listsBtn.style.display = '';
+  if (menuBtn) menuBtn.style.display = '';
 
   hideDropdown();
 }

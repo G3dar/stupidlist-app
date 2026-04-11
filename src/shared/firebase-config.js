@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, indexedDBLocalPersistence, browserLocalPersistence, initializeAuth } from 'firebase/auth';
 import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDpVS-Irl4nMGIZ9NM_CuiiAxUtPc51K7Q',
@@ -14,7 +15,15 @@ const firebaseConfig = {
 export let app, auth, firestore;
 try {
   app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
+  // In Capacitor, use explicit indexedDB persistence for auth
+  // (getAuth uses indexedDB by default but can conflict with WKWebView internals)
+  if (Capacitor.isNativePlatform()) {
+    auth = initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence]
+    });
+  } else {
+    auth = getAuth(app);
+  }
   firestore = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
   });

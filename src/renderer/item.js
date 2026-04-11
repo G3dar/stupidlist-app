@@ -1,4 +1,5 @@
 import { STATUS_CYCLE, STATUS_LABELS, STATUS_ICONS } from '../shared/constants.js';
+import { hapticFeedback } from '../shared/platform.js';
 import * as storage from './storage.js';
 import { markdownToHtml } from './formatting.js';
 import * as contextMenu from './contextMenu.js';
@@ -63,7 +64,7 @@ export function create(itemData, callbacks) {
 
       touchTimer = setTimeout(() => {
         longPressed = true;
-        if (navigator.vibrate) navigator.vibrate(50);
+        hapticFeedback();
         li.classList.add('touch-active');
       }, 500);
     }, { passive: true });
@@ -147,6 +148,17 @@ export function create(itemData, callbacks) {
           // Swipe left → mark done
           li.classList.add('item--swipe-done');
           setTimeout(() => onToggleDone(itemData.id, li), 250);
+        } else if (dx < -threshold && itemData.done) {
+          // Swipe left on already-done item → delete
+          li.classList.add('item--swipe-done');
+          setTimeout(() => onDelete(itemData.id, li), 250);
+        } else if (dx > threshold && itemData.done) {
+          // Swipe right on done item → un-done + snooze to tomorrow
+          li.classList.add('item--swipe-snooze');
+          setTimeout(async () => {
+            await storage.updateItem(itemData.id, { done: false });
+            contextMenu.snoozeToTomorrow(itemData, onRefresh || (() => {}));
+          }, 250);
         } else if (dx > threshold && (!listContext || !listContext.isSharedView)) {
           // Swipe right → snooze to tomorrow
           li.classList.add('item--swipe-snooze');

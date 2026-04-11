@@ -13,6 +13,7 @@ import * as helpOverlay from './helpOverlay.js';
 import * as multiSelect from './multiSelect.js';
 import * as undoManager from './undoManager.js';
 import * as hashtagAutocomplete from './hashtagAutocomplete.js';
+import * as thumbMenu from './thumbMenu.js';
 import { migrateStatuses } from './statusConfig.js';
 
 let currentDateKey = toDateKey(new Date());
@@ -52,11 +53,19 @@ document.addEventListener('blur', () => {
 }, true); // capture phase to catch contentEditable blur
 
 export async function init() {
-  await storage.open();
-  await migrateStatuses();
+  // Show instant editable placeholder while data loads
+  updateDateDisplay();
+  dayList.renderInstantPlaceholder();
+
+  // Non-blocking: set up UI and load data in parallel
+  const dataReady = (async () => {
+    await storage.open();
+    await migrateStatuses();
+  })();
 
   // Check for stats page
   if (isStatsPage()) {
+    await dataReady;
     authUI.init(() => {});
     await statsView.load();
     return;
@@ -65,6 +74,7 @@ export async function init() {
   // Check for shared list URL before setting up normal UI
   const shareCode = getShareCode();
   if (shareCode) {
+    await dataReady;
     authUI.init(() => {}); // no-op reload for share view
     await shareView.load(shareCode);
     return;
@@ -85,6 +95,12 @@ export async function init() {
     onListSelect: loadStandaloneList,
     onMoveToProject: loadProject,
     onBack: switchToDay
+  });
+
+  thumbMenu.init({
+    onProjectSelect: loadProject,
+    onListSelect: loadStandaloneList,
+    onToday: goToToday
   });
 
   // Init auth UI with reload callback
@@ -113,6 +129,9 @@ export async function init() {
       switchToDay();
     }
   });
+
+  // Wait for data before loading real items
+  await dataReady;
 
   // Restore view from URL hash
   const restored = await restoreFromHash();
@@ -240,11 +259,97 @@ function updateDateDisplay() {
   todayBtn.classList.toggle('is-today', currentDateKey === today);
 }
 
+function setupSwipeNavigation() {
+  const container = document.getElementById('list-container');
+  let startX = 0, startY = 0, swiping = false;
+
+  container.addEventListener('touchstart', (e) => {
+    // Only swipe-navigate if touch is NOT on an item
+    if (e.target.closest('.item')) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    swiping = false;
+  }, { passive: true });
+
+  container.addEventListener('touchmove', (e) => {
+    if (e.target.closest('.item')) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!swiping && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 20) {
+      swiping = true;
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchend', (e) => {
+    if (!swiping || currentView !== 'day') return;
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 80) {
+      if (dx < 0) navigateDay(1);   // swipe left → next day
+      else navigateDay(-1);          // swipe right → prev day
+    }
+    swiping = false;
+  });
+}
+
+function setupHamburgerMenu() {
+  const menuBtn = document.getElementById('btn-menu');
+  if (!menuBtn) return;
+
+  let menuEl = null;
+
+  function closeMenu() {
+    if (menuEl) { menuEl.remove(); menuEl = null; }
+  }
+
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menuEl) { closeMenu(); return; }
+
+    menuEl = document.createElement('div');
+    menuEl.className = 'menu-dropdown';
+
+    const listsBtn = document.createElement('button');
+    listsBtn.className = 'menu-dropdown-item';
+    listsBtn.textContent = 'Lists';
+    listsBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      closeMenu();
+      // Delay to avoid outside-click listeners closing it immediately
+      setTimeout(() => listsNav.toggleDropdown(), 10);
+    });
+
+    const projectsBtn = document.createElement('button');
+    projectsBtn.className = 'menu-dropdown-item';
+    projectsBtn.textContent = 'Projects';
+    projectsBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      closeMenu();
+      setTimeout(() => projectNav.toggleDropdown(), 10);
+    });
+
+    menuEl.appendChild(listsBtn);
+    menuEl.appendChild(projectsBtn);
+    menuBtn.parentElement.appendChild(menuEl);
+
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function handler(ev) {
+        if (!menuEl || !menuEl.contains(ev.target)) {
+          closeMenu();
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 0);
+  });
+}
+
 function setupNavigation() {
   document.getElementById('btn-prev').addEventListener('click', () => navigateDay(-1));
   document.getElementById('btn-next').addEventListener('click', () => navigateDay(1));
   document.getElementById('btn-today').addEventListener('click', goToToday);
   document.getElementById('btn-copy-list').addEventListener('click', copyListToClipboard);
+  setupSwipeNavigation();
+  setupHamburgerMenu();
 
   document.addEventListener('keydown', (e) => {
     const active = document.activeElement;

@@ -25,6 +25,12 @@ export async function render(listId, sharedContext = null, opts = {}) {
   sharedCtx = sharedContext;
   currentListId = listId;
   const list = document.getElementById('item-list');
+
+  // Flush any unsaved text before clearing DOM — the blur handler saves immediately
+  const activeText = list.querySelector('.item-text:focus');
+  const focusedId = activeText ? activeText.closest('.item')?.dataset?.id : null;
+  if (activeText) activeText.blur();
+
   if (!opts.skipLoading) {
     list.innerHTML = '<li class="list-loading"></li>';
   }
@@ -92,6 +98,12 @@ export async function render(listId, sharedContext = null, opts = {}) {
 
   renumber();
   multiSelect.reapply();
+
+  // Restore focus to the item the user was editing
+  if (focusedId) {
+    const restoredLi = list.querySelector(`[data-id="${focusedId}"]`);
+    if (restoredLi) item.focusText(restoredLi);
+  }
 }
 
 function createItemElement(itemData, isParent = false) {
@@ -183,6 +195,12 @@ async function handleToggleDone(id, li) {
   const items = await stg().getItemsForList(currentListId);
   const targetItem = items.find(i => i.id === id);
   if (!targetItem) return;
+
+  // If marking done and item has no text, delete it instead
+  if (!targetItem.done && (!targetItem.text || !targetItem.text.trim())) {
+    await handleDelete(id, li);
+    return;
+  }
 
   const newDone = !targetItem.done;
   const parentIds = new Set(items.filter(i => i.parentId).map(i => i.parentId));

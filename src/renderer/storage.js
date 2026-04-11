@@ -42,8 +42,8 @@ export function exportAll() { return local.exportAll(); }
 
 // ─── Writes (local first, cloud background via upsert) ───
 
-export async function addItem(d, t) {
-  const item = await local.addItem(d, t);
+export async function addItem(d, t, extras = {}) {
+  const item = await local.addItem(d, t, extras);
   syncToCloud(() => cloud.upsertItem(item));
   return item;
 }
