@@ -1779,6 +1779,8 @@ header {
 .signin-option svg { flex-shrink: 0; }
 .signin-apple { background: #000; color: #fff; border-color: #000; }
 .signin-apple:hover { background: #222; }
+.signin-apple:disabled { opacity: 0.6; cursor: default; }
+.signin-error { color: #e74c3c; font-size: 0.85em; margin: 8px 0 0; }
 .signin-dialog .privacy-close {
   margin-top: 8px;
   background: transparent;

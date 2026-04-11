@@ -140,6 +140,9 @@ async function signInWithApple() {
     try {
       const { Capacitor } = await import('@capacitor/core');
       const AppleSignIn = Capacitor.Plugins.AppleSignIn;
+      if (!AppleSignIn) {
+        throw new Error('Apple Sign In plugin not available');
+      }
       const result = await AppleSignIn.authorize();
       const provider = new OAuthProvider('apple.com');
       const credential = provider.credential({
@@ -148,21 +151,28 @@ async function signInWithApple() {
       });
       await signInWithCredential(auth, credential);
     } catch (err) {
-      if (!String(err).includes('canceled') && !String(err).includes('ERR_CANCELED')) {
-        console.error('Apple sign-in error:', err);
+      if (String(err).includes('canceled') || String(err).includes('ERR_CANCELED')) {
+        return;
       }
+      console.error('Apple sign-in error:', err);
+      throw err;
     }
   } else {
-    // Web: use Firebase redirect flow
     const provider = new OAuthProvider('apple.com');
     provider.addScope('email');
     provider.addScope('name');
     try {
       await signInWithPopup(auth, provider);
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        console.error('Apple sign-in error:', err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        return;
       }
+      if (err.code === 'auth/popup-blocked') {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+      console.error('Apple sign-in error:', err);
+      throw err;
     }
   }
 }

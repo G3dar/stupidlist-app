@@ -272,9 +272,24 @@ function showSignInOptions() {
     overlay.remove();
     signIn('google');
   });
-  dialog.querySelector('.signin-apple').addEventListener('click', () => {
-    overlay.remove();
-    signIn('apple');
+  dialog.querySelector('.signin-apple').addEventListener('click', async () => {
+    const btn = dialog.querySelector('.signin-apple');
+    btn.disabled = true;
+    btn.innerHTML = 'Signing in...';
+    try {
+      await signIn('apple');
+      overlay.remove();
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.53-3.23 0-1.44.62-2.2.44-3.06-.4C4.24 16.7 4.89 10.33 8.7 10.1c1.3.07 2.2.75 2.95.8.94-.19 1.82-.9 2.83-.81 1.2.1 2.1.58 2.7 1.49-2.48 1.49-1.88 4.77.59 5.69-.46 1.16-.66 1.67-1.72 3.01zM12.03 10.05c-.14-2.34 1.81-4.29 3.97-4.45.29 2.62-2.34 4.6-3.97 4.45z"/></svg> Continue with Apple`;
+      let errEl = dialog.querySelector('.signin-error');
+      if (!errEl) {
+        errEl = document.createElement('p');
+        errEl.className = 'signin-error';
+        dialog.querySelector('.privacy-close').before(errEl);
+      }
+      errEl.textContent = 'Sign in failed. Please try again.';
+    }
   });
   dialog.querySelector('.privacy-close').addEventListener('click', () => overlay.remove());
 
