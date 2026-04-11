@@ -12,6 +12,14 @@ async function initCapacitorPlugins() {
   const { Keyboard } = await import('@capacitor/keyboard');
   Keyboard.setAccessoryBarVisible({ isVisible: true });
 
+  const carryOver = document.getElementById('carry-over');
+  Keyboard.addListener('keyboardWillShow', () => {
+    if (carryOver) carryOver.style.display = 'none';
+  });
+  Keyboard.addListener('keyboardWillHide', () => {
+    if (carryOver) carryOver.style.display = '';
+  });
+
   const { SplashScreen } = await import('@capacitor/splash-screen');
   SplashScreen.hide();
 }

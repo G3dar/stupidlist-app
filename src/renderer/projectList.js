@@ -176,6 +176,19 @@ async function handleConvertToSpacer(id, li) {
   const spacerLi = createItemElement(spacerData, false);
   li.replaceWith(spacerLi);
 
+  // If next element is already an empty item, just focus it instead of creating another
+  const nextAfterSpacer = spacerLi.nextElementSibling;
+  if (nextAfterSpacer && nextAfterSpacer.classList.contains('item') && !nextAfterSpacer.classList.contains('item--spacer')) {
+    const nextText = nextAfterSpacer.querySelector('.item-text');
+    if (nextText && nextText.textContent.trim() === '') {
+      if (!sharedCtx) undoManager.endBatch();
+      renumber();
+      saveOrder();
+      setTimeout(() => item.focusText(nextAfterSpacer), 0);
+      return;
+    }
+  }
+
   const newItemData = await stg().addItemToList(currentListId, '');
   if (!sharedCtx) undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
   const newLi = createItemElement(newItemData, false);
@@ -219,13 +232,52 @@ async function handleToggleDone(id, li) {
   }
   if (!sharedCtx) undoManager.endBatch();
 
-  await render(currentListId, sharedCtx);
+  // Animate when marking as done
+  if (newDone) {
+    const elementsToAnimate = [li];
+    if (isParent) {
+      const children = items.filter(i => i.parentId === id);
+      for (const child of children) {
+        const childLi = document.querySelector(`[data-id="${child.id}"]`);
+        if (childLi) elementsToAnimate.push(childLi);
+      }
+    }
+
+    for (const el of elementsToAnimate) {
+      el.style.maxHeight = el.offsetHeight + 'px';
+      el.classList.add('item--completing');
+      const doneBtn = el.querySelector('.item-done');
+      if (doneBtn) doneBtn.innerHTML = '☑';
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 700));
+
+    for (const el of elementsToAnimate) {
+      el.classList.add('item--slide-out');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    await render(currentListId, sharedCtx);
+  } else {
+    await render(currentListId, sharedCtx);
+  }
 }
 
 async function handleNewBelow(afterId) {
   const list = document.getElementById('item-list');
   const domItems = Array.from(list.children);
   const afterIndex = domItems.findIndex(li => li.dataset.id === afterId);
+
+  // If next sibling is already an empty item, just focus it
+  const nextLi = afterIndex >= 0 ? domItems[afterIndex + 1] : null;
+  if (nextLi && nextLi.classList.contains('item') && !nextLi.classList.contains('item--spacer')) {
+    const nextText = nextLi.querySelector('.item-text');
+    if (nextText && nextText.textContent.trim() === '') {
+      setTimeout(() => item.focusText(nextLi), 0);
+      return;
+    }
+  }
 
   const items = await stg().getItemsForList(currentListId);
   const afterItem = items.find(i => i.id === afterId);

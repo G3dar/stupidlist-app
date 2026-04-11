@@ -1,5 +1,5 @@
 import { auth } from '../shared/firebase-config.js';
-import { GoogleAuthProvider, signInWithPopup, signInWithCredential, signInAnonymously as firebaseSignInAnon, onAuthStateChanged } from 'firebase/auth';
+import { GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, signInAnonymously as firebaseSignInAnon, onAuthStateChanged } from 'firebase/auth';
 import { isElectron, isCapacitor } from '../shared/platform.js';
 
 export const authState = {
@@ -100,7 +100,11 @@ async function capacitorSignIn() {
   });
 }
 
-export async function signIn() {
+export async function signIn(method = 'google') {
+  if (method === 'apple') {
+    return signInWithApple();
+  }
+
   if (isCapacitor) {
     try {
       await capacitorSignIn();
@@ -131,6 +135,38 @@ export async function signIn() {
   }
 }
 
+async function signInWithApple() {
+  if (isCapacitor) {
+    try {
+      const { Capacitor } = await import('@capacitor/core');
+      const AppleSignIn = Capacitor.Plugins.AppleSignIn;
+      const result = await AppleSignIn.authorize();
+      const provider = new OAuthProvider('apple.com');
+      const credential = provider.credential({
+        idToken: result.identityToken,
+        rawNonce: result.nonce
+      });
+      await signInWithCredential(auth, credential);
+    } catch (err) {
+      if (!String(err).includes('canceled') && !String(err).includes('ERR_CANCELED')) {
+        console.error('Apple sign-in error:', err);
+      }
+    }
+  } else {
+    // Web: use Firebase redirect flow
+    const provider = new OAuthProvider('apple.com');
+    provider.addScope('email');
+    provider.addScope('name');
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        console.error('Apple sign-in error:', err);
+      }
+    }
+  }
+}
+
 export async function signOut() {
   await auth.signOut();
 }
@@ -151,6 +187,13 @@ if (pendingIdToken) {
     console.error('Pending sign-in error:', err);
   });
 }
+
+// Handle redirect result from Apple Sign-In (or any OAuth redirect)
+getRedirectResult(auth).catch(err => {
+  if (err.code !== 'auth/popup-closed-by-user') {
+    console.error('Redirect sign-in error:', err);
+  }
+});
 
 // Listen for auth state changes (also fires on page load with persisted session)
 onAuthStateChanged(auth, (user) => {

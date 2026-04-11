@@ -65,7 +65,7 @@ function render(user) {
     const btn = document.createElement('button');
     btn.className = 'auth-btn';
     btn.textContent = 'sign in';
-    btn.addEventListener('click', signIn);
+    btn.addEventListener('click', () => showSignInOptions());
     authArea.appendChild(btn);
     return;
   }
@@ -239,6 +239,43 @@ function showPrivacyPolicy() {
     <button class="privacy-close">Close</button>
   `;
 
+  dialog.querySelector('.privacy-close').addEventListener('click', () => overlay.remove());
+
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+}
+
+function showSignInOptions() {
+  const overlay = document.createElement('div');
+  overlay.className = 'privacy-overlay';
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  const dialog = document.createElement('div');
+  dialog.className = 'privacy-dialog signin-dialog';
+  dialog.innerHTML = `
+    <h2>Sign in</h2>
+    <p>Sign in to sync your tasks across devices.</p>
+    <button class="signin-option signin-google">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Continue with Google
+    </button>
+    <button class="signin-option signin-apple">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.53-3.23 0-1.44.62-2.2.44-3.06-.4C4.24 16.7 4.89 10.33 8.7 10.1c1.3.07 2.2.75 2.95.8.94-.19 1.82-.9 2.83-.81 1.2.1 2.1.58 2.7 1.49-2.48 1.49-1.88 4.77.59 5.69-.46 1.16-.66 1.67-1.72 3.01zM12.03 10.05c-.14-2.34 1.81-4.29 3.97-4.45.29 2.62-2.34 4.6-3.97 4.45z"/></svg>
+      Continue with Apple
+    </button>
+    <button class="privacy-close">Cancel</button>
+  `;
+
+  dialog.querySelector('.signin-google').addEventListener('click', () => {
+    overlay.remove();
+    signIn('google');
+  });
+  dialog.querySelector('.signin-apple').addEventListener('click', () => {
+    overlay.remove();
+    signIn('apple');
+  });
   dialog.querySelector('.privacy-close').addEventListener('click', () => overlay.remove());
 
   overlay.appendChild(dialog);

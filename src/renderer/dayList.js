@@ -89,6 +89,16 @@ export async function render(dayDate, opts = {}) {
   const notDone = sorted.filter(i => !i.done && !i._groupDone);
   const done = sorted.filter(i => i.done || i._groupDone);
 
+  // Remove consecutive empty items (keep only the first one)
+  for (let i = notDone.length - 1; i > 0; i--) {
+    const cur = notDone[i];
+    const prev = notDone[i - 1];
+    if (!cur.isSpacer && !prev.isSpacer && !cur.text?.trim() && !prev.text?.trim()) {
+      storage.deleteItem(cur.id);
+      notDone.splice(i, 1);
+    }
+  }
+
   itemsCache = [...notDone, ...done];
 
   // Render active items
@@ -208,6 +218,19 @@ async function handleConvertToSpacer(id, li) {
   const spacerLi = createItemElement(spacerData, false);
   li.replaceWith(spacerLi);
 
+  // If next element is already an empty item, just focus it instead of creating another
+  const nextAfterSpacer = spacerLi.nextElementSibling;
+  if (nextAfterSpacer && nextAfterSpacer.classList.contains('item') && !nextAfterSpacer.classList.contains('item--spacer')) {
+    const nextText = nextAfterSpacer.querySelector('.item-text');
+    if (nextText && nextText.textContent.trim() === '') {
+      undoManager.endBatch();
+      renumber();
+      saveOrder();
+      setTimeout(() => item.focusText(nextAfterSpacer), 0);
+      return;
+    }
+  }
+
   const newItemData = await storage.addItem(currentDayDate, '');
   undoManager.push({ type: 'create', entityType: 'item', id: newItemData.id, data: { ...newItemData } });
   const newLi = createItemElement(newItemData, false);
@@ -255,14 +278,56 @@ async function handleToggleDone(id, li) {
 
   undoManager.endBatch();
 
-  // Re-render the whole list to reorder
-  await render(currentDayDate);
+  // Animate when marking as done
+  if (newDone) {
+    // Collect elements to animate (parent + children if group)
+    const elementsToAnimate = [li];
+    if (isParent) {
+      const children = items.filter(i => i.parentId === id);
+      for (const child of children) {
+        const childLi = document.querySelector(`[data-id="${child.id}"]`);
+        if (childLi) elementsToAnimate.push(childLi);
+      }
+    }
+
+    // Phase 1: Turn green + strikethrough
+    for (const el of elementsToAnimate) {
+      el.style.maxHeight = el.offsetHeight + 'px';
+      el.classList.add('item--completing');
+      const doneBtn = el.querySelector('.item-done');
+      if (doneBtn) doneBtn.innerHTML = '☑';
+    }
+
+    // Phase 2: After a moment, slide out then re-render
+    await new Promise(resolve => setTimeout(resolve, 700));
+
+    for (const el of elementsToAnimate) {
+      el.classList.add('item--slide-out');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    await render(currentDayDate);
+  } else {
+    // Un-marking done: just re-render immediately
+    await render(currentDayDate);
+  }
 }
 
 async function handleNewBelow(afterId) {
   const list = document.getElementById('item-list');
   const domItems = Array.from(list.children);
   const afterIndex = domItems.findIndex(li => li.dataset.id === afterId);
+
+  // If next sibling is already an empty item, just focus it
+  const nextLi = afterIndex >= 0 ? domItems[afterIndex + 1] : null;
+  if (nextLi && nextLi.classList.contains('item') && !nextLi.classList.contains('item--spacer')) {
+    const nextText = nextLi.querySelector('.item-text');
+    if (nextText && nextText.textContent.trim() === '') {
+      setTimeout(() => item.focusText(nextLi), 0);
+      return;
+    }
+  }
 
   // Get the item to check if it's a child
   const items = await storage.getItemsForDay(currentDayDate);
