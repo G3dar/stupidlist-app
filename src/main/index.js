@@ -22,6 +22,7 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
   mainWindow.setAutoHideMenuBar(true);
 
+  mainWindow.on('page-title-updated', (e) => e.preventDefault());
   mainWindow.setTitle(`stupidlist v${version}`);
   mainWindow.loadFile('index.html');
 

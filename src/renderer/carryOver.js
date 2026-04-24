@@ -2,6 +2,7 @@ import * as storage from './storage.js';
 import { formatDateLabel } from '../shared/constants.js';
 
 let expanded = false;
+let confirming = false;
 
 function pickExtras(item) {
   const extras = {};
@@ -20,7 +21,10 @@ export async function check(targetDate, onRefresh) {
 
   const incomplete = await storage.getIncompleteItems(targetDate);
 
-  if (incomplete.length === 0) return;
+  if (incomplete.length === 0) {
+    confirming = false;
+    return;
+  }
 
   // Button row
   const btnRow = document.createElement('div');
@@ -34,26 +38,53 @@ export async function check(targetDate, onRefresh) {
   `;
   btn.addEventListener('click', () => {
     expanded = !expanded;
+    if (!expanded) confirming = false;
     check(targetDate, onRefresh);
   });
 
-  const bringAllBtn = document.createElement('button');
-  bringAllBtn.className = 'carry-over-bring-all';
-  bringAllBtn.textContent = 'Bring all';
-  bringAllBtn.addEventListener('click', async () => {
-    bringAllBtn.disabled = true;
-    bringAllBtn.textContent = '...';
-    for (const item of incomplete) {
-      await storage.addItem(targetDate, item.text, pickExtras(item));
-      await storage.updateItem(item.id, { done: true });
-    }
-    expanded = false;
-    await check(targetDate, onRefresh);
-    onRefresh();
-  });
-
   btnRow.appendChild(btn);
-  btnRow.appendChild(bringAllBtn);
+
+  if (confirming) {
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'carry-over-bring-all';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+      confirming = false;
+      check(targetDate, onRefresh);
+    });
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'carry-over-bring-all carry-over-confirm';
+    confirmBtn.textContent = `Confirm (${incomplete.length})`;
+    confirmBtn.addEventListener('click', async () => {
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
+      confirmBtn.textContent = '...';
+      for (const item of incomplete) {
+        await storage.addItem(targetDate, item.text, pickExtras(item));
+        await storage.updateItem(item.id, { done: true });
+      }
+      expanded = false;
+      confirming = false;
+      await check(targetDate, onRefresh);
+      onRefresh();
+    });
+
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(confirmBtn);
+  } else {
+    const bringAllBtn = document.createElement('button');
+    bringAllBtn.className = 'carry-over-bring-all';
+    bringAllBtn.textContent = 'Bring all';
+    bringAllBtn.addEventListener('click', () => {
+      confirming = true;
+      expanded = true;
+      check(targetDate, onRefresh);
+    });
+
+    btnRow.appendChild(bringAllBtn);
+  }
+
   container.appendChild(btnRow);
 
   if (!expanded) return;
@@ -169,4 +200,5 @@ export async function check(targetDate, onRefresh) {
 
 export function reset() {
   expanded = false;
+  confirming = false;
 }

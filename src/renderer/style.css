@@ -870,6 +870,17 @@ header {
   cursor: default;
 }
 
+.carry-over-bring-all.carry-over-confirm {
+  border-style: solid;
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.carry-over-bring-all.carry-over-confirm:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+
 .carry-over-btn .expand-icon {
   font-size: 11px;
   color: var(--text-muted);
