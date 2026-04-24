@@ -8,38 +8,45 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // User lists: owner can read/write, anyone can read (needed for write-share validation)
+    // User lists: owner can read/write;
+    // non-owners can only read when the list is actively share-enabled.
     match /users/{userId}/lists/{listId} {
-      allow read: if true;
+      allow read: if (request.auth != null && request.auth.uid == userId)
+                  || resource.data.readShareCode != null
+                  || resource.data.writeShareCode != null;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // User items: anyone can read, owner always writes,
-    // others can write if the list has active write sharing
+    // User items: owner reads/writes;
+    // non-owners read when the parent list is share-enabled;
+    // non-owners can create/update items only when write-sharing is active.
     match /users/{userId}/items/{itemId} {
-      allow read: if true;
+      allow read: if (request.auth != null && request.auth.uid == userId)
+                  || get(/databases/$(database)/documents/users/$(userId)/lists/$(resource.data.listId)).data.readShareCode != null
+                  || get(/databases/$(database)/documents/users/$(userId)/lists/$(resource.data.listId)).data.writeShareCode != null;
       allow write: if request.auth != null && request.auth.uid == userId;
       allow create, update: if request.auth != null
         && request.resource.data.listId is string
         && get(/databases/$(database)/documents/users/$(userId)/lists/$(request.resource.data.listId)).data.writeShareCode != null;
     }
 
-    // Catch-all for other user subcollections (future-proof)
+    // Catch-all for other user subcollections (future-proof): owner only
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Share codes: anyone can read, authenticated users can create, owner can delete
+    // Share codes: doc ID (8-char random) is the secret;
+    // authenticated users can create; owner can delete.
     match /shares/{shareCode} {
       allow read: if true;
       allow create: if request.auth != null;
       allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
     }
 
-    // Login tracking: users write own, admin reads all
+    // Login tracking: users write own; reads must happen via admin console (not clients).
     match /logins/{uid} {
       allow write: if request.auth != null && request.auth.uid == uid;
-      allow read: if request.auth != null && request.auth.uid == 'KffqUUNM5TO46nXKzXybMKpxRv43';
+      allow read: if false;
     }
   }
 }

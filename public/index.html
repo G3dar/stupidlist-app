@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="stupidlist">
   <title>stupidlist</title>
-  <link rel="stylesheet" href="/renderer-web.css?v=31">
+  <link rel="stylesheet" href="/renderer-web.css?v=32">
   <style>
     @font-face {
       font-family: 'system-mono';
@@ -49,7 +49,7 @@
   </div>
   <script>
     (function() {
-      var V = '30';
+      var V = '31';
       if (localStorage.getItem('_appV') !== V) {
         localStorage.setItem('_appV', V);
         if ('caches' in window) {
@@ -60,7 +60,7 @@
       }
     })();
   </script>
-  <script src="/renderer-web.js?v=30"></script>
+  <script src="/renderer-web.js?v=31"></script>
   <script>
     (function() {
       var btn = document.getElementById('download-btn');
@@ -68,7 +68,7 @@
       var ua = navigator.userAgent;
       var isMac = /Mac/.test(ua);
       var isWin = /Win/.test(ua);
-      if (!isMac && !isWin) return;
+      if (!isMac && !isWin) { btn.style.display = 'none'; return; }
       btn.title = isMac ? 'Download for Mac' : 'Download for Windows';
       fetch('https://api.github.com/repos/G3dar/stupidlist-app/releases/latest')
         .then(function(r) { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -76,7 +76,11 @@
           if (!release.assets) return;
           var ext = isMac ? '.dmg' : '.exe';
           var asset = release.assets.find(function(a) { return a.name.endsWith(ext); });
-          if (asset) btn.href = asset.browser_download_url;
+          if (asset) {
+            btn.href = asset.browser_download_url;
+          } else if (isMac) {
+            btn.style.display = 'none';
+          }
         })
         .catch(function() {});
     })();
