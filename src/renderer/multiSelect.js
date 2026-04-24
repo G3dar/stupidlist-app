@@ -191,6 +191,7 @@ async function handleCopy() {
 
 async function handleDelete() {
   if (selectedIds.size === 0) return;
+  const scrollY = window.scrollY;
   undoManager.startBatch('delete multiple');
   for (const id of selectedIds) {
     const snapshot = await storage.getItem(id);
@@ -202,7 +203,8 @@ async function handleDelete() {
   undoManager.endBatch();
   const refresh = ctx?.onRefresh;
   exit();
-  if (refresh) refresh();
+  if (refresh) await refresh();
+  window.scrollTo(0, scrollY);
 }
 
 // ── Color Popup ──

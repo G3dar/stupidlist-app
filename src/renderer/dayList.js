@@ -364,6 +364,7 @@ async function handleDelete(id, element) {
 
   if (domItems.length <= 1) return;
 
+  const scrollY = window.scrollY;
   const index = domItems.indexOf(element);
 
   // Check if this item was a child — if parent has no more children after this, re-render parent
@@ -385,6 +386,7 @@ async function handleDelete(id, element) {
     if (remainingChildren.length === 0) {
       // Re-render to update parent display
       await render(currentDayDate);
+      window.scrollTo(0, scrollY);
       return;
     }
   }
@@ -395,8 +397,9 @@ async function handleDelete(id, element) {
   const remaining = Array.from(list.children);
   if (remaining.length > 0) {
     const focusIndex = Math.max(0, index - 1);
-    item.focusText(remaining[focusIndex]);
+    item.focusText(remaining[focusIndex], false, true);
   }
+  window.scrollTo(0, scrollY);
 }
 
 async function handleIndent(id, li) {

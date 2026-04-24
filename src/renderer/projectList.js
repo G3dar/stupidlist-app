@@ -311,6 +311,7 @@ async function handleDelete(id, element) {
 
   if (domItems.length <= 1) return;
 
+  const scrollY = window.scrollY;
   const index = domItems.indexOf(element);
 
   const items = await stg().getItemsForList(currentListId);
@@ -327,8 +328,9 @@ async function handleDelete(id, element) {
     const remaining = Array.from(list.children);
     if (remaining.length > 0) {
       const focusIndex = Math.max(0, index - 1);
-      item.focusText(remaining[focusIndex]);
+      item.focusText(remaining[focusIndex], false, true);
     }
+    window.scrollTo(0, scrollY);
     return;
   }
 
@@ -343,6 +345,7 @@ async function handleDelete(id, element) {
     const remainingChildren = items.filter(i => i.parentId === parentId && i.id !== id && !i.deleted);
     if (remainingChildren.length === 0) {
       await render(currentListId, sharedCtx);
+      window.scrollTo(0, scrollY);
       return;
     }
   }
@@ -353,8 +356,9 @@ async function handleDelete(id, element) {
   const remaining = Array.from(list.children);
   if (remaining.length > 0) {
     const focusIndex = Math.max(0, index - 1);
-    item.focusText(remaining[focusIndex]);
+    item.focusText(remaining[focusIndex], false, true);
   }
+  window.scrollTo(0, scrollY);
 }
 
 async function handleIndent(id, li) {

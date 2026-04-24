@@ -573,10 +573,10 @@ function isOnLastLine(el) {
   return Math.abs(cursorRects[0].top - endRects[0].top) < lineHeight * 0.5;
 }
 
-export function focusText(li, atStart = false) {
+export function focusText(li, atStart = false, preventScroll = false) {
   const text = li.querySelector('.item-text');
   if (text) {
-    text.focus();
+    text.focus({ preventScroll });
     const range = document.createRange();
     const sel = window.getSelection();
     if (text.childNodes.length > 0) {
