@@ -6,3 +6,18 @@ public/renderer-web.css
 .DS_Store
 Thumbs.db
 .firebase/
+
+# Local tooling
+.claude/
+
+# Scratch: icon experiments, backups, screenshots
+/IMG_*.png
+icons/temp_*
+icons/*_backup.*
+icons/brain_final.png
+icons/brain_selected.png
+icons/brain_square.png
+icons/grid.png
+icons/pick.html
+icons/variants.html
+
