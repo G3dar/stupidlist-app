@@ -1,7 +1,7 @@
 {
   "name": "stupidlist",
   "productName": "stupidlist",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "A stupid simple daily list app",
   "main": "src/main/index.js",
   "scripts": {
@@ -24,11 +24,14 @@
     "productName": "stupidlist",
     "icon": "icons/icon_new.png",
     "files": [
-      "dist/**/*",
+      "dist/preload.js",
+      "dist/renderer.js",
+      "dist/renderer.css",
       "index.html",
-      "src/main/index.js",
+      "src/main/**/*",
       "icons/icon_new.ico",
-      "icons/icon_new.png"
+      "icons/icon_new.png",
+      "!node_modules/**/*"
     ],
     "win": {
       "target": [
