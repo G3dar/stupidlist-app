@@ -1,6 +1,6 @@
-import { DB_NAME, ITEMS_STORE, PROJECTS_STORE, LISTS_STORE, generateId, migrateState } from '../shared/constants.js';
+import { DB_NAME, ITEMS_STORE, PROJECTS_STORE, LISTS_STORE, CUSTOM_VIEWS_STORE, generateId, migrateState } from '../shared/constants.js';
 
-const DB_VER = 4;
+const DB_VER = 5;
 let db = null;
 
 export function open() {
@@ -44,6 +44,11 @@ export function open() {
       if (!database.objectStoreNames.contains(LISTS_STORE)) {
         const listsStore = database.createObjectStore(LISTS_STORE, { keyPath: 'id' });
         listsStore.createIndex('byProject', 'projectId', { unique: false });
+      }
+
+      // Custom Views store
+      if (!database.objectStoreNames.contains(CUSTOM_VIEWS_STORE)) {
+        database.createObjectStore(CUSTOM_VIEWS_STORE, { keyPath: 'id' });
       }
     };
 
@@ -522,36 +527,101 @@ export async function upsertList(data) {
   await promisify(store.put(data));
 }
 
+export async function upsertCustomView(data) {
+  await open();
+  const store = getStore(CUSTOM_VIEWS_STORE, 'readwrite');
+  await promisify(store.put(data));
+}
+
+// ─── Custom Views ───
+
+export async function getAllCustomViews() {
+  await open();
+  const store = getStore(CUSTOM_VIEWS_STORE);
+  const all = await promisify(store.getAll());
+  return all.filter(v => !v.deleted).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+export async function getCustomView(id) {
+  await open();
+  const store = getStore(CUSTOM_VIEWS_STORE);
+  const view = await promisify(store.get(id));
+  return view && !view.deleted ? view : null;
+}
+
+export async function addCustomView(name, selections) {
+  await open();
+  const existing = await getAllCustomViews();
+  const view = {
+    id: generateId(),
+    name: name || 'Untitled view',
+    selections: selections || [],
+    order: existing.length,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    deleted: false
+  };
+
+  const store = getStore(CUSTOM_VIEWS_STORE, 'readwrite');
+  await promisify(store.put(view));
+  return view;
+}
+
+export async function updateCustomView(id, changes) {
+  await open();
+  const store = getStore(CUSTOM_VIEWS_STORE, 'readwrite');
+  const view = await promisify(store.get(id));
+  if (!view) return null;
+
+  Object.assign(view, changes, { updatedAt: Date.now() });
+  await promisify(store.put(view));
+  return view;
+}
+
+export async function deleteCustomView(id) {
+  await open();
+  const store = getStore(CUSTOM_VIEWS_STORE, 'readwrite');
+  const view = await promisify(store.get(id));
+  if (!view) return;
+  view.deleted = true;
+  view.updatedAt = Date.now();
+  await promisify(store.put(view));
+}
+
 // ─── Export ───
 
 export async function exportAll() {
   await open();
-  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE], 'readonly');
+  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE, CUSTOM_VIEWS_STORE], 'readonly');
   const items = await promisify(tx.objectStore(ITEMS_STORE).getAll());
   const projects = await promisify(tx.objectStore(PROJECTS_STORE).getAll());
   const lists = await promisify(tx.objectStore(LISTS_STORE).getAll());
+  const customViews = await promisify(tx.objectStore(CUSTOM_VIEWS_STORE).getAll());
   return {
     items: items.filter(i => !i.deleted),
     projects: projects.filter(p => !p.deleted),
-    lists: lists.filter(l => !l.deleted)
+    lists: lists.filter(l => !l.deleted),
+    customViews: customViews.filter(v => !v.deleted)
   };
 }
 
 export async function exportAllRaw() {
   await open();
-  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE], 'readonly');
+  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE, CUSTOM_VIEWS_STORE], 'readonly');
   const items = await promisify(tx.objectStore(ITEMS_STORE).getAll());
   const projects = await promisify(tx.objectStore(PROJECTS_STORE).getAll());
   const lists = await promisify(tx.objectStore(LISTS_STORE).getAll());
-  return { items, projects, lists };
+  const customViews = await promisify(tx.objectStore(CUSTOM_VIEWS_STORE).getAll());
+  return { items, projects, lists, customViews };
 }
 
 export async function clearAll() {
   await open();
-  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE], 'readwrite');
+  const tx = db.transaction([ITEMS_STORE, PROJECTS_STORE, LISTS_STORE, CUSTOM_VIEWS_STORE], 'readwrite');
   tx.objectStore(ITEMS_STORE).clear();
   tx.objectStore(PROJECTS_STORE).clear();
   tx.objectStore(LISTS_STORE).clear();
+  tx.objectStore(CUSTOM_VIEWS_STORE).clear();
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);

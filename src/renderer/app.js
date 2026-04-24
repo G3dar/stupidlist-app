@@ -14,12 +14,14 @@ import * as multiSelect from './multiSelect.js';
 import * as undoManager from './undoManager.js';
 import * as hashtagAutocomplete from './hashtagAutocomplete.js';
 import * as thumbMenu from './thumbMenu.js';
+import * as customView from './customView.js';
 import { migrateStatuses } from './statusConfig.js';
 
 let currentDateKey = toDateKey(new Date());
-let currentView = 'day'; // 'day', 'project', or 'standalone'
+let currentView = 'day'; // 'day', 'project', 'standalone', or 'custom'
 let currentProjectId = null;
 let currentListId = null;
+let currentCustomViewId = null;
 let loadDayPromise = null;
 let remoteRenderTimer = null;
 let pendingRemoteRender = null;
@@ -87,7 +89,8 @@ export async function init() {
       if (projectId) loadProject(projectId, listId);
       else loadStandaloneList(listId);
     },
-    onBack: switchToDay
+    onBack: switchToDay,
+    onCustomViewSelect: loadCustomView
   });
 
   listsNav.init({
@@ -100,7 +103,8 @@ export async function init() {
   thumbMenu.init({
     onProjectSelect: loadProject,
     onListSelect: loadStandaloneList,
-    onToday: goToToday
+    onToday: goToToday,
+    onCustomViewSelect: loadCustomView
   });
 
   // Init auth UI with reload callback
@@ -112,6 +116,8 @@ export async function init() {
       await loadProject(currentProjectId, currentListId);
     } else if (currentView === 'standalone' && currentListId) {
       await loadStandaloneList(currentListId);
+    } else if (currentView === 'custom' && currentCustomViewId) {
+      await loadCustomView(currentCustomViewId);
     }
   });
 
@@ -124,7 +130,7 @@ export async function init() {
 
   // Mouse back button → go back to day view
   document.addEventListener('mouseup', (e) => {
-    if (e.button === 3 && (currentView === 'standalone' || currentView === 'project')) {
+    if (e.button === 3 && (currentView === 'standalone' || currentView === 'project' || currentView === 'custom')) {
       e.preventDefault();
       switchToDay();
     }
@@ -153,6 +159,7 @@ async function loadDay(dateKey) {
     currentDateKey = dateKey;
     currentProjectId = null;
     currentListId = null;
+    currentCustomViewId = null;
     updateHash();
     updateDateDisplay();
     await dayList.render(dateKey);
@@ -178,6 +185,7 @@ async function loadProject(projectId, listId) {
   multiSelect.exit();
   currentView = 'project';
   currentProjectId = projectId;
+  currentCustomViewId = null;
 
   // If no listId provided, get the first list
   if (!listId) {
@@ -218,6 +226,7 @@ async function loadStandaloneList(listId, autoFocusTitle) {
   currentView = 'standalone';
   currentListId = listId;
   currentProjectId = null;
+  currentCustomViewId = null;
   updateHash();
 
   // Hide carry-over in standalone mode
@@ -235,9 +244,27 @@ async function loadStandaloneList(listId, autoFocusTitle) {
   });
 }
 
+async function loadCustomView(viewId) {
+  multiSelect.exit();
+  currentView = 'custom';
+  currentCustomViewId = viewId;
+  currentProjectId = null;
+  currentListId = null;
+  updateHash();
+
+  document.getElementById('carry-over').innerHTML = '';
+
+  storage.unsubscribe();
+
+  await projectNav.showCustomViewHeader(viewId);
+  await customView.render(viewId);
+}
+
 async function refreshCurrentView() {
   if (currentView === 'day') {
     await dayList.render(currentDateKey);
+  } else if (currentView === 'custom' && currentCustomViewId) {
+    await customView.render(currentCustomViewId);
   } else if (currentListId) {
     await projectList.render(currentListId);
   }
@@ -441,6 +468,8 @@ function setupFlushSaves() {
         loadProject(currentProjectId, currentListId);
       } else if (currentView === 'standalone' && currentListId) {
         loadStandaloneList(currentListId);
+      } else if (currentView === 'custom' && currentCustomViewId) {
+        loadCustomView(currentCustomViewId);
       }
     }
   });
@@ -493,6 +522,8 @@ function updateHash() {
     history.replaceState(null, '', '#project/' + currentProjectId + '/' + currentListId);
   } else if (currentView === 'standalone' && currentListId) {
     history.replaceState(null, '', '#list/' + currentListId);
+  } else if (currentView === 'custom' && currentCustomViewId) {
+    history.replaceState(null, '', '#view/' + currentCustomViewId);
   } else {
     history.replaceState(null, '', window.location.pathname + window.location.search);
   }
@@ -518,6 +549,16 @@ async function restoreFromHash() {
     const list = await storage.getList(listId);
     if (list) {
       await loadProject(projectId, listId);
+      return true;
+    }
+    return false;
+  }
+  const viewMatch = hash.match(/^#view\/(.+)$/);
+  if (viewMatch) {
+    const viewId = viewMatch[1];
+    const view = await storage.getCustomView(viewId);
+    if (view) {
+      await loadCustomView(viewId);
       return true;
     }
     return false;

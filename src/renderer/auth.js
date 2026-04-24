@@ -2,6 +2,66 @@ import { auth } from '../shared/firebase-config.js';
 import { GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, signInAnonymously as firebaseSignInAnon, onAuthStateChanged } from 'firebase/auth';
 import { isElectron, isCapacitor } from '../shared/platform.js';
 
+// Native token persistence for iOS (WKWebView can lose IndexedDB/localStorage)
+let Preferences = null;
+if (isCapacitor) {
+  import('@capacitor/preferences').then(m => { Preferences = m.Preferences; }).catch(() => {});
+}
+
+async function saveGoogleRefreshToken(googleRefreshToken) {
+  if (!Preferences || !googleRefreshToken) return;
+  try {
+    await Preferences.set({ key: 'google_refresh_token', value: googleRefreshToken });
+  } catch {}
+}
+
+async function saveProviderInfo(providerId) {
+  if (!Preferences) return;
+  try {
+    await Preferences.set({ key: 'auth_provider', value: providerId });
+  } catch {}
+}
+
+async function clearNativeAuth() {
+  if (!Preferences) return;
+  try {
+    await Preferences.remove({ key: 'google_refresh_token' });
+    await Preferences.remove({ key: 'auth_provider' });
+  } catch {}
+}
+
+async function restoreSession() {
+  if (!Preferences) return false;
+  try {
+    const { value: googleRefreshToken } = await Preferences.get({ key: 'google_refresh_token' });
+    if (!googleRefreshToken) return false;
+
+    // Exchange Google refresh token for fresh Google tokens
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: IOS_CLIENT_ID,
+        grant_type: 'refresh_token',
+        refresh_token: googleRefreshToken
+      })
+    });
+    const tokens = await response.json();
+    if (!tokens.id_token) {
+      await clearNativeAuth();
+      return false;
+    }
+
+    const credential = GoogleAuthProvider.credential(tokens.id_token, tokens.access_token);
+    await signInWithCredential(auth, credential);
+    return true;
+  } catch (err) {
+    console.warn('Session restore failed:', err.message);
+    await clearNativeAuth();
+    return false;
+  }
+}
+
 export const authState = {
   isLoggedIn: false,
   user: null,
@@ -43,11 +103,12 @@ async function capacitorSignIn() {
     redirect_uri: IOS_REDIRECT_SCHEME + ':/oauth2callback',
     response_type: 'code',
     scope: 'openid email profile',
+    access_type: 'offline',
     state: state,
     nonce: nonce,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
-    prompt: 'select_account'
+    prompt: 'consent'
   });
 
   return new Promise((resolve, reject) => {
@@ -78,6 +139,11 @@ async function capacitorSignIn() {
 
         const tokens = await tokenResponse.json();
         if (tokens.id_token) {
+          // Store Google refresh token in native storage for session persistence
+          if (tokens.refresh_token) {
+            await saveGoogleRefreshToken(tokens.refresh_token);
+            await saveProviderInfo('google.com');
+          }
           localStorage.setItem('_pendingIdToken', tokens.id_token);
           if (tokens.access_token) {
             localStorage.setItem('_pendingAccessToken', tokens.access_token);
@@ -150,6 +216,7 @@ async function signInWithApple() {
         rawNonce: result.nonce
       });
       await signInWithCredential(auth, credential);
+      await saveProviderInfo('apple.com');
     } catch (err) {
       if (String(err).includes('canceled') || String(err).includes('ERR_CANCELED')) {
         return;
@@ -178,6 +245,7 @@ async function signInWithApple() {
 }
 
 export async function signOut() {
+  await clearNativeAuth();
   await auth.signOut();
 }
 
@@ -206,7 +274,18 @@ getRedirectResult(auth).catch(err => {
 });
 
 // Listen for auth state changes (also fires on page load with persisted session)
-onAuthStateChanged(auth, (user) => {
+let sessionRestoreAttempted = false;
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    sessionRestoreAttempted = false;
+  } else if (isCapacitor && !sessionRestoreAttempted) {
+    // No user on Capacitor — WKWebView may have lost session data.
+    // Try restoring from native storage (Google refresh token in UserDefaults).
+    sessionRestoreAttempted = true;
+    const restored = await restoreSession();
+    if (restored) return; // onAuthStateChanged will fire again with the user
+  }
+
   authState.isLoggedIn = !!user;
   authState.user = user;
   authState.uid = user ? user.uid : null;

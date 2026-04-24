@@ -11,7 +11,7 @@ const config: CapacitorConfig = {
       backgroundColor: '#ffffff',
     },
     Keyboard: {
-      resize: 'body',
+      resize: 'native',
       resizeOnFullScreen: true,
     },
     GoogleAuth: {

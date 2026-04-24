@@ -3,11 +3,13 @@ import { authState } from './auth.js';
 import * as undoManager from './undoManager.js';
 import { showDeleteConfirm } from './deleteConfirm.js';
 import { hapticFeedback } from '../shared/platform.js';
+import * as multiSelector from './multiSelector.js';
 
 let onProjectSelect = null;
 let onListSelect = null;
 let onMoveList = null;
 let onBack = null;
+let onCustomViewSelect = null;
 let dropdownVisible = false;
 
 function addLongPress(element, callback) {
@@ -52,6 +54,7 @@ export function init(callbacks) {
   onListSelect = callbacks.onListSelect;
   onMoveList = callbacks.onMoveList;
   onBack = callbacks.onBack;
+  onCustomViewSelect = callbacks.onCustomViewSelect;
 
   document.getElementById('btn-projects').addEventListener('click', toggleDropdown);
 
@@ -169,6 +172,30 @@ async function showDropdown() {
     dd.appendChild(row);
   }
 
+  // Custom Views section
+  const customViews = await storage.getAllCustomViews();
+  if (customViews.length > 0) {
+    const sep = document.createElement('div');
+    sep.className = 'projects-dropdown-sep';
+    dd.appendChild(sep);
+
+    for (const view of customViews) {
+      const row = buildCustomViewRow(view);
+      dd.appendChild(row);
+    }
+  }
+
+  // "+ Multi..." button to create a new custom view
+  const multiBtn = document.createElement('div');
+  multiBtn.className = 'projects-dropdown-multi-btn';
+  multiBtn.textContent = '+ Multi view...';
+  multiBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideDropdown();
+    openMultiSelector(null);
+  });
+  dd.appendChild(multiBtn);
+
   // New project input
   const input = document.createElement('input');
   input.className = 'new-project-input';
@@ -193,6 +220,68 @@ async function showDropdown() {
   dd.appendChild(input);
 }
 
+function buildCustomViewRow(view) {
+  const row = document.createElement('div');
+  row.className = 'project-row project-row--custom-view';
+
+  const name = document.createElement('span');
+  name.className = 'project-row-name';
+  name.textContent = view.name || 'Untitled view';
+
+  const badge = document.createElement('span');
+  badge.className = 'project-row-count';
+  const count = Array.isArray(view.selections) ? view.selections.length : 0;
+  badge.textContent = `${count} selected`;
+
+  row.appendChild(name);
+  row.appendChild(badge);
+
+  row.addEventListener('click', () => {
+    if (row._longPressed) { row._longPressed = false; return; }
+    hideDropdown();
+    if (onCustomViewSelect) onCustomViewSelect(view.id);
+  });
+
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    hideDropdown();
+    openMultiSelector(view);
+  });
+
+  addLongPress(row, () => {
+    hideDropdown();
+    openMultiSelector(view);
+  });
+
+  return row;
+}
+
+function openMultiSelector(existing) {
+  multiSelector.open({
+    existing,
+    onSave: async (name, selections) => {
+      if (existing) {
+        const before = { name: existing.name, selections: existing.selections };
+        await storage.updateCustomView(existing.id, { name, selections });
+        undoManager.push({
+          type: 'update', entityType: 'customView', id: existing.id,
+          before, after: { name, selections }
+        });
+        if (onCustomViewSelect) onCustomViewSelect(existing.id);
+      } else {
+        const view = await storage.addCustomView(name, selections);
+        undoManager.push({ type: 'create', entityType: 'customView', id: view.id, data: { ...view } });
+        if (onCustomViewSelect) onCustomViewSelect(view.id);
+      }
+    },
+    onDelete: existing ? async (view) => {
+      undoManager.push({ type: 'delete', entityType: 'customView', id: view.id, data: { ...view } });
+      await storage.deleteCustomView(view.id);
+      if (onBack) onBack();
+    } : null
+  });
+}
+
 async function performDeleteProject(project) {
   undoManager.startBatch('delete project');
   const listsToDelete = await storage.getListsForProject(project.id);
@@ -207,6 +296,84 @@ async function performDeleteProject(project) {
   undoManager.endBatch();
   await storage.deleteProject(project.id);
   await showDropdown();
+}
+
+export async function showCustomViewHeader(viewId) {
+  const headerLeft = document.querySelector('.header-left');
+  const logo = headerLeft.querySelector('.logo');
+  const projectsBtn = document.getElementById('btn-projects');
+
+  const view = await storage.getCustomView(viewId);
+  if (!view) return;
+
+  // Hide day nav + list nav; keep projects button visible so user can navigate elsewhere
+  document.getElementById('day-nav').style.display = 'none';
+  document.getElementById('list-nav').style.display = 'none';
+  projectsBtn.style.display = '';
+  const newListBtn = document.getElementById('btn-new-list');
+  const listsBtn = document.getElementById('btn-lists');
+  const menuBtn = document.getElementById('btn-menu');
+  if (newListBtn) newListBtn.style.display = 'none';
+  if (listsBtn) listsBtn.style.display = 'none';
+  if (menuBtn) menuBtn.style.display = 'none';
+
+  logo.innerHTML = '';
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn-back';
+  backBtn.textContent = '←';
+  backBtn.title = 'Back to daily view';
+  backBtn.addEventListener('click', () => {
+    restoreDayHeader();
+    if (onBack) onBack();
+  });
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'project-name cv-header-name';
+  nameSpan.textContent = view.name || 'Untitled view';
+
+  nameSpan.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.className = 'project-name-input';
+    input.value = view.name || '';
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const save = async () => {
+      const newName = input.value.trim() || view.name;
+      if (newName !== view.name) {
+        const oldName = view.name;
+        await storage.updateCustomView(viewId, { name: newName });
+        undoManager.push({ type: 'update', entityType: 'customView', id: viewId, before: { name: oldName }, after: { name: newName } });
+        view.name = newName;
+      }
+      nameSpan.textContent = view.name;
+      input.replaceWith(nameSpan);
+    };
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape') {
+        input.value = view.name;
+        input.blur();
+      }
+    });
+  });
+
+  // Edit button opens multi-selector
+  const editBtn = document.createElement('button');
+  editBtn.className = 'btn-cv-edit';
+  editBtn.textContent = '⋯';
+  editBtn.title = 'Edit custom view';
+  editBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openMultiSelector(view);
+  });
+
+  logo.appendChild(backBtn);
+  logo.appendChild(nameSpan);
+  logo.appendChild(editBtn);
 }
 
 export async function showProjectHeader(projectId, activeListId) {

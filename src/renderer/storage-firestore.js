@@ -339,6 +339,61 @@ export async function upsertList(data) {
   await setDoc(userDoc('lists', data.id), data, { merge: true });
 }
 
+export async function upsertCustomView(data) {
+  await setDoc(userDoc('customViews', data.id), data, { merge: true });
+}
+
+// ─── Custom Views ───
+
+export async function getAllCustomViews() {
+  const q = query(userCol('customViews'), where('deleted', '==', false));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.data()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+export async function addCustomView(name, selections) {
+  const existing = await getAllCustomViews();
+  const view = {
+    id: generateId(),
+    name: name || 'Untitled view',
+    selections: selections || [],
+    order: existing.length,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    deleted: false
+  };
+  await setDoc(userDoc('customViews', view.id), view);
+  return view;
+}
+
+export async function updateCustomView(id, changes) {
+  const ref = userDoc('customViews', id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const updated = { ...changes, updatedAt: Date.now() };
+  await updateDoc(ref, updated);
+  return { ...snap.data(), ...updated };
+}
+
+export async function deleteCustomView(id) {
+  await updateDoc(userDoc('customViews', id), { deleted: true, updatedAt: Date.now() });
+}
+
+export function listenToCustomViews(callback) {
+  const q = query(userCol('customViews'));
+  return onSnapshot(q, (snapshot) => {
+    const remoteChanges = snapshot.docChanges().filter(c => !c.doc.metadata.hasPendingWrites);
+    if (remoteChanges.length === 0) return;
+    const upserted = [];
+    for (const change of remoteChanges) {
+      if (change.type === 'added' || change.type === 'modified' || change.type === 'removed') {
+        upserted.push(change.doc.data());
+      }
+    }
+    callback({ upserted });
+  });
+}
+
 // ─── Sharing ───
 
 export async function shareList(listId, projectId, projectName, listName) {
@@ -533,16 +588,18 @@ export function listenToProjects(callback) {
 // ─── Export ───
 
 export async function exportAll() {
-  const [itemsSnap, projectsSnap, listsSnap] = await Promise.all([
+  const [itemsSnap, projectsSnap, listsSnap, customViewsSnap] = await Promise.all([
     getDocs(query(userCol('items'), where('deleted', '==', false))),
     getDocs(query(userCol('projects'), where('deleted', '==', false))),
-    getDocs(query(userCol('lists'), where('deleted', '==', false)))
+    getDocs(query(userCol('lists'), where('deleted', '==', false))),
+    getDocs(query(userCol('customViews'), where('deleted', '==', false)))
   ]);
 
   return {
     items: itemsSnap.docs.map(d => d.data()),
     projects: projectsSnap.docs.map(d => d.data()),
-    lists: listsSnap.docs.map(d => d.data())
+    lists: listsSnap.docs.map(d => d.data()),
+    customViews: customViewsSnap.docs.map(d => d.data())
   };
 }
 

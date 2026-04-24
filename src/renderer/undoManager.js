@@ -117,6 +117,7 @@ function getStorageUpdate(entityType) {
   switch (entityType) {
     case 'project': return storage.updateProject;
     case 'list': return storage.updateList;
+    case 'customView': return storage.updateCustomView;
     default: return storage.updateItem;
   }
 }
@@ -125,6 +126,7 @@ function getStorageDelete(entityType) {
   switch (entityType) {
     case 'project': return storage.deleteProject;
     case 'list': return storage.deleteList;
+    case 'customView': return storage.deleteCustomView;
     default: return storage.deleteItem;
   }
 }

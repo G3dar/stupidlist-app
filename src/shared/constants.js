@@ -35,6 +35,7 @@ export const DB_VERSION = 3;
 export const ITEMS_STORE = 'items';
 export const PROJECTS_STORE = 'projects';
 export const LISTS_STORE = 'lists';
+export const CUSTOM_VIEWS_STORE = 'customViews';
 
 export function toDateKey(date) {
   const d = date || new Date();

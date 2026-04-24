@@ -1,5 +1,7 @@
 import * as storage from './storage.js';
 import { hapticFeedback } from '../shared/platform.js';
+import * as multiSelector from './multiSelector.js';
+import * as undoManager from './undoManager.js';
 
 let menuEl = null;
 let lastTapTime = 0;
@@ -111,6 +113,7 @@ function renderMainMenu() {
   const items = [
     { label: 'Lists', action: () => showListsSubmenu() },
     { label: 'Projects', action: () => showProjectsSubmenu() },
+    { label: 'Views', action: () => showViewsSubmenu() },
     { label: 'Today', action: () => { close(); callbacks.onToday(); } }
   ];
 
@@ -166,6 +169,105 @@ async function showProjectsSubmenu() {
   }
 
   repositionMenu();
+}
+
+function addLongPressTo(element, callback) {
+  let timer = null;
+  let startX = 0;
+  let startY = 0;
+  element.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    timer = setTimeout(() => {
+      element._longPressed = true;
+      hapticFeedback();
+      callback();
+    }, 500);
+  }, { passive: true });
+  element.addEventListener('touchmove', (e) => {
+    const touch = e.touches[0];
+    if (Math.sqrt((touch.clientX - startX) ** 2 + (touch.clientY - startY) ** 2) > 10) {
+      clearTimeout(timer);
+    }
+  }, { passive: true });
+  element.addEventListener('touchend', () => clearTimeout(timer));
+  element.addEventListener('touchcancel', () => clearTimeout(timer));
+}
+
+async function showViewsSubmenu() {
+  if (!menuEl) return;
+  menuEl.innerHTML = '';
+
+  const back = createBackButton();
+  menuEl.appendChild(back);
+
+  // "+ Multi..." button to create a new custom view
+  const newBtn = document.createElement('button');
+  newBtn.className = 'thumb-menu-item thumb-menu-new';
+  newBtn.textContent = '+ Multi view...';
+  newBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    close();
+    openMultiSelector(null);
+  });
+  menuEl.appendChild(newBtn);
+
+  const customViews = await storage.getAllCustomViews();
+
+  if (customViews.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'thumb-menu-empty';
+    empty.textContent = 'No custom views yet';
+    menuEl.appendChild(empty);
+    repositionMenu();
+    return;
+  }
+
+  customViews.forEach((view) => {
+    const btn = document.createElement('button');
+    btn.className = 'thumb-menu-item';
+    btn.textContent = view.name || 'Untitled view';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (btn._longPressed) { btn._longPressed = false; return; }
+      close();
+      if (callbacks.onCustomViewSelect) callbacks.onCustomViewSelect(view.id);
+    });
+    addLongPressTo(btn, () => {
+      close();
+      openMultiSelector(view);
+    });
+    menuEl.appendChild(btn);
+  });
+
+  repositionMenu();
+}
+
+function openMultiSelector(existing) {
+  multiSelector.open({
+    existing,
+    onSave: async (name, selections) => {
+      if (existing) {
+        const before = { name: existing.name, selections: existing.selections };
+        await storage.updateCustomView(existing.id, { name, selections });
+        undoManager.push({
+          type: 'update', entityType: 'customView', id: existing.id,
+          before, after: { name, selections }
+        });
+        if (callbacks.onCustomViewSelect) callbacks.onCustomViewSelect(existing.id);
+      } else {
+        const view = await storage.addCustomView(name, selections);
+        undoManager.push({ type: 'create', entityType: 'customView', id: view.id, data: { ...view } });
+        if (callbacks.onCustomViewSelect) callbacks.onCustomViewSelect(view.id);
+      }
+    },
+    onDelete: existing ? async (view) => {
+      undoManager.push({ type: 'delete', entityType: 'customView', id: view.id, data: { ...view } });
+      await storage.deleteCustomView(view.id);
+      if (callbacks.onToday) callbacks.onToday();
+    } : null
+  });
 }
 
 async function showListsSubmenu() {

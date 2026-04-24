@@ -38,6 +38,8 @@ export function getListsForProject(pid) { return local.getListsForProject(pid); 
 export function getItemsForList(lid) { return local.getItemsForList(lid); }
 export function getStandaloneLists() { return local.getStandaloneLists(); }
 export function getList(id) { return local.getList(id); }
+export function getAllCustomViews() { return local.getAllCustomViews(); }
+export function getCustomView(id) { return local.getCustomView(id); }
 export function exportAll() { return local.exportAll(); }
 
 // ─── Writes (local first, cloud background via upsert) ───
@@ -130,6 +132,23 @@ export async function deleteList(id) {
   syncToCloud(() => cloud.deleteList(id));
 }
 
+export async function addCustomView(name, selections) {
+  const view = await local.addCustomView(name, selections);
+  syncToCloud(() => cloud.upsertCustomView(view));
+  return view;
+}
+
+export async function updateCustomView(id, changes) {
+  const view = await local.updateCustomView(id, changes);
+  if (view) syncToCloud(() => cloud.upsertCustomView(view));
+  return view;
+}
+
+export async function deleteCustomView(id) {
+  await local.deleteCustomView(id);
+  syncToCloud(() => cloud.deleteCustomView(id));
+}
+
 export async function addItemToList(lid, t) {
   const item = await local.addItemToList(lid, t);
   syncToCloud(() => cloud.upsertItem(item));
@@ -216,10 +235,12 @@ export async function syncWithCloud() {
     const localItemMap = new Map(localData.items.map(i => [i.id, i]));
     const localProjMap = new Map(localData.projects.map(p => [p.id, p]));
     const localListMap = new Map(localData.lists.map(l => [l.id, l]));
+    const localCvMap = new Map((localData.customViews || []).map(v => [v.id, v]));
 
     const cloudItemMap = new Map(cloudData.items.map(i => [i.id, i]));
     const cloudProjMap = new Map(cloudData.projects.map(p => [p.id, p]));
     const cloudListMap = new Map(cloudData.lists.map(l => [l.id, l]));
+    const cloudCvMap = new Map((cloudData.customViews || []).map(v => [v.id, v]));
 
     // Cloud → Local (cloud wins if newer)
     for (const ci of cloudData.items) {
@@ -240,6 +261,12 @@ export async function syncWithCloud() {
         await local.upsertList(cl);
       }
     }
+    for (const cv of (cloudData.customViews || [])) {
+      const lv = localCvMap.get(cv.id);
+      if (!lv || cv.updatedAt > lv.updatedAt) {
+        await local.upsertCustomView(cv);
+      }
+    }
 
     // Local → Cloud (push items that never reached cloud or are newer locally)
     for (const li of localData.items) {
@@ -258,6 +285,12 @@ export async function syncWithCloud() {
       const cl = cloudListMap.get(ll.id);
       if (!cl || ll.updatedAt > cl.updatedAt) {
         await cloud.upsertList(ll);
+      }
+    }
+    for (const lv of (localData.customViews || [])) {
+      const cv = cloudCvMap.get(lv.id);
+      if (!cv || lv.updatedAt > cv.updatedAt) {
+        await cloud.upsertCustomView(lv);
       }
     }
   } catch (err) {

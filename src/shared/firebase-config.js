@@ -19,7 +19,7 @@ try {
   // (getAuth uses indexedDB by default but can conflict with WKWebView internals)
   if (Capacitor.isNativePlatform()) {
     auth = initializeAuth(app, {
-      persistence: [indexedDBLocalPersistence, browserLocalPersistence]
+      persistence: [browserLocalPersistence, indexedDBLocalPersistence]
     });
   } else {
     auth = getAuth(app);
